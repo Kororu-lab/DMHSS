@@ -4,4 +4,5 @@ __pycache__/
 *.pyo
 *.egg-info/
 .ipynb_checkpoints/
-data/
+data/compressed
+data/processed
