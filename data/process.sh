@@ -6,7 +6,7 @@ mkdir -p released processed
 # Decompress all files from "compressed" to "released"
 for file in compressed/*.zst; do
     BASENAME=$(basename $file .zst)
-    zstd -d $file -o "released/$BASENAME.ndjson"
+    zstd -d $file --long=31 -o "released/$BASENAME.ndjson"
 done
 
 # Process files in "released" and save results in "processed"
