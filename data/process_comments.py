@@ -11,9 +11,7 @@ output_file = sys.argv[2]
 
 fields = [
     "created_utc", "subreddit", "author", "body", "score",
-    "gilded", "is_submitter", "num_reports",
-    "stickied", "subreddit_type", "total_awards_received",
-    "ups"
+    "is_submitter"
 ]
 
 with open(input_file, 'r', encoding='utf-8') as infile, open(output_file, 'w', newline='', encoding='utf-8') as outfile:
