@@ -1,1 +1,0 @@
-# RS_2020-02.zsh may crash: need download again.

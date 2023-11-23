@@ -10,11 +10,11 @@ input_file = sys.argv[1]
 output_file = sys.argv[2]
 
 fields = [
-    "created_utc", "subreddit", "author", "title", "selftext", "score", "num_comments"
+    "id", "created_utc", "subreddit", "author", "title", "selftext", "score", "num_comments"
 ]
 
 with open(input_file, 'r', encoding='utf-8') as infile, open(output_file, 'w', newline='', encoding='utf-8') as outfile:
-    writer = csv.DictWriter(outfile, fieldnames=fields, escapechar='\\', quoting=csv.QUOTE_NONE)
+    writer = csv.DictWriter(outfile, fieldnames=fields, quoting=csv.QUOTE_ALL)
     writer.writeheader()
     count = 0
 

@@ -34,9 +34,9 @@ process_files() {
     sudo mv "$SSD_DIR/processed/"*.csv "$HDD_DIR_PROCESSED/"
     
     # Clean up the SSD compressed and released directories
-    echo "Cleaning up SSD compressed directory..."
+    echo "Cleaning up SSD directory..."
     rm -fv "$SSD_DIR/compressed/"*
-    echo "Cleaning up SSD released directory..."
+    # echo "Cleaning up SSD released directory..."
     rm -fv "$SSD_DIR/released/"*
     
     echo "Processed files: $(basename "$comment_file") and $(basename "$submission_file")"
