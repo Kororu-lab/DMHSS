@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Define directories
-HDD_DIR_COMMENTS="/media/kororu/D20_Main_Storage/N99_Project_Data/Reddit/reddit/comments"
-HDD_DIR_SUBMISSIONS="/media/kororu/D20_Main_Storage/N99_Project_Data/Reddit/reddit/submissions"
+HDD_DIR_COMMENTS="/mnt/d20_main/N99_Project_Data/Reddit/reddit/comments"
+HDD_DIR_SUBMISSIONS="/mnt/d20_main/N99_Project_Data/Reddit/reddit/submissions"
 SSD_DIR="/home/kororu/DMHSS/data"
-HDD_DIR_PROCESSED="/media/kororu/D20_Main_Storage/N99_Project_Data/Reddit/processedcsv"
+HDD_DIR_PROCESSED="/mnt/t7/REDDIT/workload"
 
 # Fetch list of files from the directories
 comments_files=($(ls "$HDD_DIR_COMMENTS"/*.zst))

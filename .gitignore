@@ -9,3 +9,6 @@ data/processed
 data/released
 data/tempstorage
 data/testing
+booting.sh
+data/autoseed.sh
+src/usertest.ipynb
