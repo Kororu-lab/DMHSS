@@ -1,0 +1,11 @@
+// Index the 'author' field in the comments collection
+db.comments.createIndex({ "author": 1 });
+
+// Index the 'created_utc' field in the comments collection
+db.comments.createIndex({ "created_utc": 1 });
+
+// Index the 'author' field in the submissions collection
+db.submissions.createIndex({ "author": 1 });
+
+// Index the 'created_utc' field in the submissions collection
+db.submissions.createIndex({ "created_utc": 1 });

@@ -25,9 +25,9 @@ process_files() {
     echo "Files in the compressed directory:"
     ls "$SSD_DIR/compressed/"
     
-    # Execute the processing script
+    # Execute the processing script for specific files
     echo "Processing files..."
-    bash "$SSD_DIR/process.sh"
+    bash "$SSD_DIR/process.sh" "$(basename "$comment_file")" "$(basename "$submission_file")"
     
     # Move processed files to the HDD processed directory
     echo "Moving processed files to HDD..."
@@ -36,11 +36,11 @@ process_files() {
     # Clean up the SSD compressed and released directories
     echo "Cleaning up SSD directory..."
     rm -fv "$SSD_DIR/compressed/"*
-    # echo "Cleaning up SSD released directory..."
     rm -fv "$SSD_DIR/released/"*
     
     echo "Processed files: $(basename "$comment_file") and $(basename "$submission_file")"
 }
+
 
 i=0
 while [ $i -lt ${#comments_files[@]} ]; do

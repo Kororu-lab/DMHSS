@@ -13,3 +13,4 @@ booting.sh
 data/autoseed.sh
 src/usertest.ipynb
 *.csv
+*.pkl

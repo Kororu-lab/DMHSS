@@ -1,20 +1,19 @@
 #!/bin/bash
 
-# Create directories if they don't exist
-mkdir -p released processed
+# Process only the passed files
+comment_file=$1
+submission_file=$2
 
-# Decompress all files from "compressed" to "released"
-for file in compressed/*.zst; do
-    BASENAME=$(basename $file .zst)
-    zstd -d -f $file --long=31 -o "released/$BASENAME.ndjson"
-done
+# Decompress and process the comment file
+if [[ -n $comment_file ]]; then
+    BASENAME=$(basename $comment_file .zst)
+    zstd -d -f "$SSD_DIR/compressed/$comment_file" --long=31 -o "$SSD_DIR/released/$BASENAME.ndjson"
+    python3 process_comments.py "$SSD_DIR/released/$BASENAME.ndjson" "$SSD_DIR/processed/$BASENAME.csv"
+fi
 
-# Process files in "released" and save results in "processed"
-for file in released/*.ndjson; do
-    BASENAME=$(basename $file .ndjson)
-    if [[ $BASENAME == *_comments || $BASENAME == RC_* ]]; then
-        python3 process_comments.py "released/$BASENAME.ndjson" "processed/$BASENAME.csv"
-    elif [[ $BASENAME == *_submissions || $BASENAME == RS_* ]]; then
-        python3 process_submissions.py "released/$BASENAME.ndjson" "processed/$BASENAME.csv"
-    fi
-done
+# Decompress and process the submission file
+if [[ -n $submission_file ]]; then
+    BASENAME=$(basename $submission_file .zst)
+    zstd -d -f "$SSD_DIR/compressed/$submission_file" --long=31 -o "$SSD_DIR/released/$BASENAME.ndjson"
+    python3 process_submissions.py "$SSD_DIR/released/$BASENAME.ndjson" "$SSD_DIR/processed/$BASENAME.csv"
+fi
