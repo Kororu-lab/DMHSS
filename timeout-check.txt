@@ -1,0 +1,2 @@
+db.adminCommand({setParameter: 1, cursorTimeoutMillis: 864000000})  // 10 days in milliseconds
+db.adminCommand({setParameter: 1, cursorTimeoutMillis: 600000})  // Resetting back to 10 minutes

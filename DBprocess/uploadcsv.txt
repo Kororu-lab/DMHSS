@@ -1,0 +1,5 @@
+mongoimport --type csv -d reddit -c filtered_submissions --headerline --file ./filtered_submissions.csv
+
+mongoimport --type csv -d reddit -c filtered_comments --headerline --file ./filtered_comments.csv
+
+mongoimport --type csv -d reddit -c filtered_submissions_bunch --headerline --file ./filtered_submissions_by_subreddit.csv

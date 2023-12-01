@@ -6,6 +6,7 @@ __pycache__/
 .ipynb_checkpoints/
 data/compressed
 data/processed
+analysis/oldanalysis
 data/released
 data/tempstorage
 data/testing

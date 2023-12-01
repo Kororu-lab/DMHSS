@@ -9,3 +9,7 @@ db.submissions.createIndex({ "author": 1 });
 
 // Index the 'created_utc' field in the submissions collection
 db.submissions.createIndex({ "created_utc": 1 });
+
+
+db.submissions.createIndex({ "subreddit": 1 });
+db.comments.createIndex({ "subreddit": 1 });

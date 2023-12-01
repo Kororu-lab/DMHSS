@@ -5,8 +5,8 @@ from tqdm import tqdm
 # Increase the field size limit
 csv.field_size_limit(sys.maxsize)
 
-input_file = "filtered_comments_total.csv"
-output_file = "sorted_filtered_comments_total.csv"
+input_file = "filtered_submissions.csv"
+output_file = "sorted_filtered_submissions.csv"
 
 # Function to get the 'created_utc' column value for sorting
 def get_utc(row):

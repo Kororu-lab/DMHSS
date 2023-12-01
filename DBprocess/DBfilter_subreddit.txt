@@ -1,0 +1,13 @@
+var subredditArray = ["rant", "relationship_advice", "NoStupidQuestions", "BPD", "depression", "TooAfraidToAsk", "self", "raisedbynarcissists", "Drugs", "legaladvice", "OutOfTheLoop", "NoFap", "AMA", "tifu", "relationships", "ptsd", "dating_advice", "Christianity", "TwoXChromosomes", "offmychest", "explainlikeimfive", "findareddit", "panicparty", "jobs", "StopSelfHarm", "copypasta", "unpopularopinion", "askscience", "psychoticreddit", "hardshipmates", "survivorsofabuse", "CasualConversation", "teenagers", "loseit", "socialanxiety", "TrueOffMyChest", "WritingPrompts", "Tinder", "mentalhealth", "AskOuija", "tipofmytongue", "AskMen", "AskDocs", "Anxiety", "EatingDisorders", "rapecounseling", "traumatoolbox", "AmItheAsshole", "ADHD", "skyrim", "AskWomen", "BipolarReddit", "atheism", "Advice", "confession", "lgbt", "sex"]
+
+// Aggregation for the submissions collection
+db.submissions.aggregate([
+    { $match: { subreddit: { $in: subredditArray } } },
+    { $out: "relevant_submissions" }
+]);
+
+// Aggregation for the comments collection
+db.comments.aggregate([
+    { $match: { subreddit: { $in: subredditArray } } },
+    { $out: "relevant_comments" }
+]);
