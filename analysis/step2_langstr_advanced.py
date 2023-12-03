@@ -18,7 +18,7 @@ db = client['reddit']  # Replace 'reddit' with your actual database name if diff
 # Collection names and parameters
 submissions_collection_name = "filtered_submissions"  # Replace with your submissions collection name
 comments_collection_name = "filtered_comments"  # Replace with your comments collection name
-batch_size = 1000  # Adjust batch size based on your memory capacity and document size
+batch_size = 100  # Adjust batch size based on your memory capacity and document size
 expanded_research = False  # Set to True for expanded research as per your new requirements
 
 # Define subreddits

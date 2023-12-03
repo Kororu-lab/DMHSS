@@ -14,18 +14,31 @@ def process_id(reddit_id):
     """ Process Reddit ID to remove prefix """
     return reddit_id.split('_')[-1]
 
-def process_comment(G, comment, submissions_data):
-    """ Process a single comment and update the graph """
-    author = comment['author']
-    parent_id = process_id(comment['parent_id'])
-    link_id = process_id(comment['link_id'])
+def process_comments_batch(G, batch, submissions_data):
+    """ Process a batch of comments and update the graph """
+    for comment in batch:
+        author = comment['author']
+        parent_id = process_id(comment['parent_id'])
+        link_id = process_id(comment['link_id'])
 
-    if parent_id in submissions_data:
-        G.add_edge(author, submissions_data[parent_id]['author'], type='submission_reply')
-    elif parent_id != link_id:
-        G.add_edge(author, parent_id, type='comment_reply')
-    if link_id in submissions_data:
-        G.add_edge(author, submissions_data[link_id]['author'], type='submission_reference')
+        if parent_id in submissions_data:
+            G.add_edge(author, submissions_data[parent_id]['author'], type='submission_reply')
+        elif parent_id != link_id:
+            G.add_edge(author, parent_id, type='comment_reply')
+        if link_id in submissions_data:
+            G.add_edge(author, submissions_data[link_id]['author'], type='submission_reference')
+
+def process_comments_in_batches(G, comments_cursor, submissions_data, batch_size):
+    """ Process comments in batches and add edges to the graph """
+    batch = []
+    for comment in comments_cursor:
+        batch.append(comment)
+        if len(batch) >= batch_size:
+            process_comments_batch(G, batch, submissions_data)
+            batch.clear()
+
+    if batch:
+        process_comments_batch(G, batch, submissions_data)
 
 def save_centrality_scores(G, filename):
     """ Calculate and save centrality scores """
@@ -40,7 +53,7 @@ def save_centrality_scores(G, filename):
             for user, score in centrality.items():
                 file.write(f"{user}: {score}\n")
 
-def main():
+def main(batch_size=10000):
     # MongoDB Local Connection
     client = MongoClient()
     db = client['reddit']
@@ -65,9 +78,11 @@ def main():
     else:
         # Create a Graph
         G = nx.DiGraph()
-        print("Building the Graph...")
-        for comment in tqdm(db['filtered_comments'].find(projection=projection_comments), desc="Processing Comments"):
-            process_comment(G, comment, submissions_data)
+        print("Building the Graph in Batches...")
+
+        # Process comments in batches
+        comments_cursor = db['filtered_comments'].find(projection=projection_comments)
+        process_comments_in_batches(G, comments_cursor, submissions_data, batch_size)
 
         # Save the graph to file
         nx.write_gexf(G, graph_file)
@@ -83,4 +98,4 @@ def main():
     print("Analysis completed.")
 
 if __name__ == "__main__":
-    main()
+    main(batch_size=5000)  # Adjust batch size as needed for memory efficiency
