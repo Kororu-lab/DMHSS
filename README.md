@@ -16,14 +16,13 @@ Our further model partly refur to the method from 2016 research named "" which t
 ## Integrated Model
 To overcome the previous problem of single post sentiment based models, we tried to get complex features from all-across reddit archive and integrate in single model to find out people who are in severe status effectively. To achieve the goal we tried various analysis methods for given data and found out some useful features to integrate.
 ## Analysis Methods We used
-We tried to analyze each users active patterns with methods below:
-### User Network Analysis(Graph Based)
-### Group Feature Extraction
-### Time-series User Movement Analysis
-### POS/Lexical Analysis
-### Extended Sentiment Analysis(Sentiment Score Analysis)
-### Communication Score Analysis
-### Multimodal Analysis(of {}, {})
+We integrated four metrics to analyze each users active patterns with methods below:
+### Sentiment Score
+### Language Structure Score
+### Active Pattern Score
+### Communication Score
+
+Due to the lack of computation, we constrainted our methods into 4, and integrated by summ up with weights for each normalized scores.
 
 ## Model test
 To test our model performance we tried some competetion for our new model and previous sentiment-based models, to make rank of SW users, and get 50 users with most severe status(according to each model), then got their all activity from whole reddit(see /analysis/Extraction.py). Detailed rules is as below:
