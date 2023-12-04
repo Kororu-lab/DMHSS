@@ -10,8 +10,8 @@ OUTPUT_DIR = "./step1/"
 BATCH_SIZE = 100  # Adjustable batch size for data processing
 
 # Collection names
-COLLECTION_SUBMISSIONS = "filtered_submissions_score2"
-COLLECTION_COMMENTS = "filtered_comments_score2"
+COLLECTION_SUBMISSIONS = "filtered_submissions_sentiment"
+COLLECTION_COMMENTS = "filtered_comments_sentiment"
 
 # Ensure output directory exists
 if not os.path.exists(OUTPUT_DIR):
