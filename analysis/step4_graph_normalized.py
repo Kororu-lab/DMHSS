@@ -23,12 +23,15 @@ def calculate_communication_scores():
         {
             "$unionWith": {
                 "coll": SUBMISSIONS_COLLECTION_NAME,
-                "pipeline": [{"$project": {"author": 1, "usr_grp": 1, "subreddit_grp": 1, "created_utc": 1, "parent_author": 1}}]
+                "pipeline": [{"$project": {"author": 1, "usr_grp": 1, "subreddit_grp": 1, "created_utc": 1, "parent_author": 1, "created_day": 1}}]
             }
         },
         {
+            "$addFields": {"month": {"$substr": ["$created_day", 0, 7]}}
+        },
+        {
             "$group": {
-                "_id": {"author": "$author", "user_grp": "$usr_grp", "subreddit_grp": "$subreddit_grp"},
+                "_id": {"author": "$author", "user_grp": "$usr_grp", "subreddit_grp": {"$ifNull": ["$subreddit_grp", "ALL"]}},
                 "total_interactions": {"$sum": 1},
                 "unique_users": {"$addToSet": "$parent_author"},
                 "unique_subreddits": {"$addToSet": "$subreddit_grp"}
@@ -37,115 +40,65 @@ def calculate_communication_scores():
         {
             "$group": {
                 "_id": {"author": "$_id.author", "user_grp": "$_id.user_grp"},
+                "subreddit_grp": {"$first": "$_id.subreddit_grp"},
                 "avg_comm_score": {"$avg": {
                     "$add": [
                         {"$multiply": ["$total_interactions", INTERACTION_WEIGHT]},
                         {"$multiply": [{"$size": "$unique_users"}, UNIQUE_USER_WEIGHT]},
                         {"$multiply": [{"$size": "$unique_subreddits"}, SUBREDDIT_DIVERSITY_WEIGHT]}
                     ]
-                }},
-                "subreddit_groups": {"$push": "$_id.subreddit_grp"}
+                }}
             }
         },
         {
             "$project": {
                 "author": "$_id.author",
                 "user_grp": "$_id.user_grp",
-                "avg_comm_score": 1,
-                "subreddit_groups": 1
-            }
-        },
-        {
-            "$unwind": "$subreddit_groups"
-        },
-        {
-            "$group": {
-                "_id": {"author": "$author", "user_grp": "$user_grp", "subreddit_grp": "$subreddit_groups"},
-                "avg_comm_score": {"$first": "$avg_comm_score"}
-            }
-        },
-        {
-            "$project": {
-                "author": "$_id.author",
-                "user_grp": "$_id.user_grp",
-                "subreddit_grp": "$_id.subreddit_grp",
+                "subreddit_grp": 1,
                 "avg_comm_score": 1
-            }
-        },
-        {
-            "$unionWith": {
-                "coll": COMMENTS_COLLECTION_NAME,
-                "pipeline": [
-                    {
-                        "$group": {
-                            "_id": {"author": "$author", "user_grp": "$usr_grp"},
-                            "avg_comm_score_ALL": {"$avg": "$avg_comm_score"}
-                        }
-                    },
-                    {
-                        "$project": {
-                            "author": "$_id.author",
-                            "user_grp": "$_id.user_grp",
-                            "subreddit_grp": "ALL",
-                            "avg_comm_score": "$avg_comm_score_ALL"
-                        }
-                    }
-                ]
             }
         }
     ]
+
     raw_scores = list(db[COMMENTS_COLLECTION_NAME].aggregate(pipeline))
     return normalize_scores_per_user(raw_scores)
 
 def normalize_scores_per_user(data):
-    """ Normalize scores to a range between 0 and 1 for each user """
     df = pd.DataFrame(data)
+    if 'subreddit_grp' not in df.columns:
+        print("DataFrame does not contain 'subreddit_grp'. Check the aggregation pipeline.")
+        return
     df['normalized_score'] = df.groupby('author')['avg_comm_score'].transform(lambda x: MinMaxScaler().fit_transform(x.values.reshape(-1, 1)).flatten())
     return df
 
-def apply_log_scale(data):
-    """ Apply logarithmic scaling to the communication scores """
-    data['log_comm_score'] = data['avg_comm_score'].apply(lambda x: np.log(x + 1))
-    return data
-
 def export_to_csv_and_plot(data, filename):
-    # Create the output directory if it doesn't exist
     output_dir = "./step4/"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Convert data to DataFrame
     df = pd.DataFrame(data)
     if df.empty:
         print("DataFrame is empty. No data to plot.")
         return
 
-    # Normalize the scores per user
     df = normalize_scores_per_user(df)
 
-    # Ensure the DataFrame contains the expected columns
-    expected_columns = ['user_grp', 'subreddit_grp', 'normalized_score']
-    if not all(col in df.columns for col in expected_columns):
-        print("Missing expected columns in DataFrame. Cannot create heatmap.")
-        return
+    # Order for rows and columns
+    order = ["SW", "MH", "Otr", "ALL"]
 
-    # Create a pivot table for the heatmap
+    # Filter and reorder DataFrame
+    df['subreddit_grp'] = pd.Categorical(df['subreddit_grp'], categories=order, ordered=True)
+    df['user_grp'] = pd.Categorical(df['user_grp'], categories=order, ordered=True)
+    df = df.sort_values(by=['user_grp', 'subreddit_grp'])
+
+    # Pivot table for heatmap
     pivot_table = df.pivot_table(index='user_grp', columns='subreddit_grp', values='normalized_score', fill_value=0)
-    if pivot_table.empty:
-        print("Pivot table is empty. No data to plot.")
-        return
 
-    # Plotting the heatmap
     plt.figure(figsize=(10, 8))
     sns.heatmap(pivot_table, annot=True, fmt=".2f", cmap="YlGnBu")
     plt.title("Per-User Normalized Communication Score Matrix")
-
-    # Save the heatmap to the specified directory
     plt.savefig(os.path.join(output_dir, "per_user_normalized_communication_scores_matrix.png"))
-
-    # Save the DataFrame to CSV in the specified directory
     df.to_csv(os.path.join(output_dir, filename), index=False)
-    
+
 def main():
     print("Calculating communication scores...")
     scores_data = calculate_communication_scores()
