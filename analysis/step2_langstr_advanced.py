@@ -3,9 +3,9 @@ import nltk
 from nltk.corpus import stopwords
 import textstat
 from collections import Counter
-import pandas as pd
 from tqdm import tqdm
 import csv
+import os
 
 # Ensure NLTK resources are available
 nltk.download('punkt')
@@ -21,19 +21,6 @@ comments_collection_name = "filtered_comments"  # Replace with your comments col
 batch_size = 100  # Adjust batch size based on your memory capacity and document size
 expanded_research = False  # Set to True for expanded research as per your new requirements
 
-# Define subreddits
-SW = ['SuicideWatch']
-MH_subreddits = [
-    "depression", "mentalhealth", "traumatoolbox", "bipolarreddit", 
-    "BPD", "ptsd", "psychoticreddit", "EatingDisorders", "StopSelfHarm", 
-    "survivorsofabuse", "rapecounseling", "hardshipmates", 
-    "panicparty", "socialanxiety"
-] 
-
-# Convert SW and MH_subreddits lists to lowercase
-SW = [sub.lower() for sub in SW]
-MH_subreddits = [sub.lower() for sub in MH_subreddits]
-
 # Function for linguistic analysis
 def process_text(text):
     sentences = nltk.sent_tokenize(text)
@@ -45,9 +32,8 @@ def process_text(text):
     num_verbs = sum(counts[tag] for tag in ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'])
     num_adverbs = sum(counts[tag] for tag in ['RB', 'RBR', 'RBS'])
 
-    # Pronoun counts
     pronouns = {'first_person': 0, 'second_person': 0, 'third_person': 0}
-    her_count = 0  # Count for the word 'her'
+    her_count = 0
     for word, tag in tagged:
         if tag in ['PRP', 'PRP$']:
             word_lower = word.lower()
@@ -57,7 +43,6 @@ def process_text(text):
                 pronouns['second_person'] += 1
             else:
                 pronouns['third_person'] += 1
-
             if word_lower == 'her':
                 her_count += 1
 
@@ -76,68 +61,41 @@ def process_text(text):
         "readability_score": readability_score
     }
 
-# Function to analyze a collection
-def analyze_collection(collection_name):
-    results = []
-    user_posts = {}  # Dictionary to track user posts across categories
+# Function to analyze a collection and save results to CSV
+def analyze_collection_and_save(collection_name, output_file):
+    with open(output_file, 'w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(['subreddit', 'subreddit_group', 'user_group', 'num_sentences', 'num_words', 
+                         'num_nouns', 'num_verbs', 'num_adverbs', 'first_person_pronouns', 
+                         'second_person_pronouns', 'third_person_pronouns', 
+                         'her_count', 'readability_score'])
 
-    cursor = db[collection_name].find().batch_size(batch_size)
-    for post in tqdm(cursor, desc=f"Processing {collection_name}"):
-        subreddit = str(post.get('subreddit', '')).lower()  # Ensure subreddit is a string
-        user = post['author']
-        text = post.get('body') or post.get('title') or post.get('selftext')
+        cursor = db[collection_name].find().batch_size(batch_size)
+        for post in tqdm(cursor, desc=f"Processing {collection_name}"):
+            subreddit = post.get('subreddit', '')
+            subreddit_grp = post.get('subreddit_grp', '').upper()
+            user_grp = post.get('usr_grp', '').upper() if expanded_research else subreddit_grp
+            text = post.get('body') or post.get('title') or post.get('selftext')
 
-        # Update user_posts dictionary for expanded research
-        if expanded_research:
-            if user not in user_posts:
-                user_posts[user] = {'SW': 0, 'MH': 0, 'Others': 0}
-            if subreddit in SW:
-                user_posts[user]['SW'] += 1
-            elif subreddit in MH_subreddits:
-                user_posts[user]['MH'] += 1
-            else:
-                user_posts[user]['Others'] += 1
+            if text and isinstance(text, str):
+                analysis = process_text(text)
+                writer.writerow([subreddit, subreddit_grp, user_grp,
+                                 analysis['num_sentences'], analysis['num_words'],
+                                 analysis['num_nouns'], analysis['num_verbs'],
+                                 analysis['num_adverbs'], analysis['first_person_pronouns'],
+                                 analysis['second_person_pronouns'], analysis['third_person_pronouns'],
+                                 analysis['her_count'], analysis['readability_score']])
 
-        # Make sure text is a string
-        if text and isinstance(text, str):
-            analysis = process_text(text)
+        # Clean up memory after processing each batch
+        del cursor
 
-            # Determine user group based on posting behavior
-            user_group = 'Others'
-            if expanded_research:
-                if user_posts[user]['SW'] > 0:
-                    user_group = 'SW'
-                elif user_posts[user]['MH'] > 0:
-                    user_group = 'MH'
-            else:
-                user_group = 'SW' if subreddit in SW else ('MH' if subreddit in MH_subreddits else 'Others')
+# Ensure output directory exists
+output_dir = "./step2/"
+os.makedirs(output_dir, exist_ok=True)
 
-            analysis['subreddit'] = subreddit
-            analysis['user_group'] = user_group
-            results.append(analysis)
-
-    return pd.DataFrame(results)
-
-# Analyze submissions and comments
-submission_results = analyze_collection(submissions_collection_name)
-comment_results = analyze_collection(comments_collection_name) if db[comments_collection_name].estimated_document_count() > 0 else []
-
-# Combine and convert results to DataFrame
-combined_results = pd.concat([submission_results, comment_results])
-
-# Aggregate and analyze linguistic patterns
-agg_df = combined_results.groupby('user_group').agg({
-    'num_nouns': 'mean',
-    'num_verbs': 'mean',
-    'num_adverbs': 'mean',
-    'first_person_pronouns': 'mean',
-    'second_person_pronouns': 'mean',
-    'third_person_pronouns': 'mean',
-    'her_count': 'mean',
-    'readability_score': 'mean'
-}).reset_index()
-
-# Save the aggregated DataFrame to a CSV file
-agg_df.to_csv("aggregated_linguistic_patterns.csv", index=False)
+# Analyze submissions and comments, saving results to CSV files
+analyze_collection_and_save(submissions_collection_name, os.path.join(output_dir, "submission_results.csv"))
+if db[comments_collection_name].estimated_document_count() > 0:
+    analyze_collection_and_save(comments_collection_name, os.path.join(output_dir, "comment_results.csv"))
 
 # Additional specific analyses and CSV generation can be added here

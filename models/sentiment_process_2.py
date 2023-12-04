@@ -7,8 +7,8 @@ from multiprocessing import Pool, current_process
 
 ### Hyperparameters and Configurations ###
 DB_NAME = "reddit"
-COLLECTION_NAME = "filtered_comments_standard"
-COLLECTION_TYPE = "C"  # 'C' for comments, 'S' for submissions
+COLLECTION_NAME = "filtered_submissions_standard"
+COLLECTION_TYPE = "S"  # 'C' for comments, 'S' for submissions
 BATCH_SIZE = 80  # Adjust based on available VRAM and model size
 NUM_WORKERS = 2  # Number of parallel processes for data fetching
 
@@ -51,7 +51,16 @@ def process_chunk(chunk_start, chunk_end):
     local_client = MongoClient()
     local_db = local_client[DB_NAME]
     local_collection = local_db[COLLECTION_NAME]
-    cursor = local_collection.find({}).skip(chunk_start).limit(chunk_end - chunk_start)
+
+    # Modify the query to exclude documents that already have sentiment scores
+    query = {"sentiment_score": {"$exists": False}} if COLLECTION_TYPE == "C" else {
+        "$or": [
+            {"sentiment_score_title": {"$exists": False}},
+            {"sentiment_score_text": {"$exists": False}},
+            {"sentiment_score_complex": {"$exists": False}}
+        ]
+    }
+    cursor = local_collection.find(query).skip(chunk_start).limit(chunk_end - chunk_start)
 
     # Using tqdm with postfix to identify which process is providing updates
     for doc in tqdm(cursor, desc=f"Process {current_process().name}", position=int(current_process().name.split('-')[-1])):
@@ -67,6 +76,7 @@ def process_chunk(chunk_start, chunk_end):
             }})
 
     local_client.close()
+
 
 # Calculate the number of documents to process per worker
 total_docs = collection.count_documents({})

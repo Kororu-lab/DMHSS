@@ -1,0 +1,7 @@
+// Step 1: Update SW Collections to add subreddit_grp field
+db.SW_comments.updateMany({}, { $set: { subreddit_grp: "SW" } });
+db.SW_submissions.updateMany({}, { $set: { subreddit_grp: "SW" } });
+
+// Step 2: Merge SW Collections into Relevant Collections
+db.SW_comments.aggregate([{ $merge: "relevant_comments" }]);
+db.SW_submissions.aggregate([{ $merge: "relevant_submissions" }]);

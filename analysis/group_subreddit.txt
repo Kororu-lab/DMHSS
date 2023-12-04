@@ -1,0 +1,36 @@
+// Define the collection name as a variable
+const collectionName = "filtered_comments_standard";
+
+const SW = ['SuicideWatch'];
+// Define the mh_subreddits array
+const mh_subreddits = [
+    "depression", "mentalhealth", "traumatoolbox", "BipolarReddit", 
+    "BPD", "ptsd", "psychoticreddit", "EatingDisorders", "StopSelfHarm", 
+    "survivorsofabuse", "rapecounseling", "hardshipmates", 
+    "panicparty", "socialanxiety"
+];
+
+db[collectionName].aggregate([
+  {
+    $addFields: {
+      subreddit_grp: {
+        $switch: {
+          branches: [
+            {
+              case: { $in: ["$subreddit", mh_subreddits] },
+              then: "MH"
+            },
+            {
+              case: { $eq: ["$subreddit", "SuicideWatch"] },
+              then: "SW"
+            }
+          ],
+          default: "Otr"
+        }
+      }
+    }
+  },
+  {
+    $out: collectionName // Replace the existing collection with the updated documents
+  }
+]);

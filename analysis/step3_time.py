@@ -1,41 +1,31 @@
 import pymongo
 import pandas as pd
-import numpy as np
-from tqdm import tqdm
 import matplotlib.pyplot as plt
+import os
+from tqdm import tqdm
+import numpy as np
 
 # Hyperparameters
-DB_NAME = "reddit"  # Replace with your database name
-SUBMISSION_COLLECTION_NAME = "filtered_submissions"  # Replace with your submissions collection name
-COMMENT_COLLECTION_NAME = "filtered_comments"  # Replace with your comments collection name
-TIME_WINDOW = "1D"  # Example: '1D' for daily, '1W' for weekly
-BATCH_SIZE = 10000  # Adjust based on memory capacity
+DB_NAME = "reddit"
+SUBMISSION_COLLECTION_NAME = "filtered_submissions_standard"
+COMMENT_COLLECTION_NAME = "filtered_comments_standard"
+TIME_WINDOW = "1D"
+BATCH_SIZE = 10000
+SUBREDDIT_GROUPS = ["SW", "MH", "Otr", "ALL"]
+USER_GROUPS = ["SW", "MH", "Otr"]
 
 def connect_to_mongodb(db_name, collection_name):
-    client = pymongo.MongoClient()  # Add connection string if needed
+    client = pymongo.MongoClient()
     db = client[db_name]
     collection = db[collection_name]
     return collection
 
-def batch_aggregate_user_activity(collection, batch_size):
+def batch_aggregate_user_activity(collection, batch_size, subreddit_group):
     pipeline = [
-        {"$project": {"author": 1, "created_utc": 1}},  # Only project necessary fields
-        {"$group": {
-            "_id": {
-                "author": "$author",
-                "time_window": {
-                    "$toDate": {
-                        "$subtract": [
-                            {"$toLong": "$created_utc"},
-                            {"$mod": [{"$toLong": "$created_utc"}, 1000 * 60 * 60 * 24 * int(TIME_WINDOW[:-1])]}
-                        ]
-                    }
-                }
-            },
-            "count": {"$sum": 1}
-        }},
-        {"$sort": {"_id.time_window": 1}},
-        {"$skip": 0},  # Skip is updated in each batch
+        {"$match": {"subreddit_grp": subreddit_group}} if subreddit_group != "ALL" else {"$match": {}},
+        {"$project": {"author": 1, "created_utc": 1, "usr_grp": 1}},
+        {"$sort": {"created_utc": 1}},
+        {"$skip": 0},
         {"$limit": batch_size}
     ]
     skip = 0
@@ -47,47 +37,47 @@ def batch_aggregate_user_activity(collection, batch_size):
         yield batch
         skip += batch_size
 
-def calculate_fluctuation_scores(data):
-    # Convert to DataFrame
-    df = pd.DataFrame(data)
-    df['time_window'] = pd.to_datetime(df['_id'].apply(lambda x: x['time_window']))
-    df['author'] = df['_id'].apply(lambda x: x['author'])
-    df.drop(columns=['_id'], inplace=True)
+def calculate_activity_scores(df, time_window):
+    df['time_window'] = pd.to_datetime(df['created_utc'], unit='s')
+    df.set_index('time_window', inplace=True)
+    resampled_df = df.resample(time_window).count()
+    resampled_df['activity_change_score'] = resampled_df['author'].diff().abs()
+    return resampled_df['activity_change_score'].mean()
 
-    # Pivot the data to have authors as rows and time windows as columns
-    pivot_df = df.pivot_table(index='author', columns='time_window', values='count', fill_value=0)
-
-    # Calculate the standard deviation of post counts for each user
-    fluctuation_scores = pivot_df.std(axis=1).to_frame(name='fluctuation_score')
-
-    return fluctuation_scores
-
-def plot_user_activity(data, author, save_dir="./step2/"):
-    # Ensure the save directory exists
+def plot_group_activity(data, group_name, save_dir="./step3/"):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    user_data = data[data['author'] == author]
     plt.figure(figsize=(12, 6))
-    plt.plot(user_data['time_window'], user_data['count'], marker='o')
-    plt.title(f"Activity Pattern for User: {author}")
+    data.plot(kind='line', title=f"Average Activity Pattern for Group: {group_name}")
     plt.xlabel("Time Window")
-    plt.ylabel("Number of Posts/Comments")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, f"{author}_activity.png"))
+    plt.ylabel("Average Activity Score")
+    plt.savefig(os.path.join(save_dir, f"{group_name}_activity.png"))
     plt.close()
 
 # Main Execution
-submission_collection = connect_to_mongodb(DB_NAME, SUBMISSION_COLLECTION_NAME)
-comment_collection = connect_to_mongodb(DB_NAME, COMMENT_COLLECTION_NAME)
-
-# Process and Plot Data in Batches
-for collection, collection_name in [(submission_collection, "submissions"), (comment_collection, "comments")]:
-    print(f"Processing {collection_name} data...")
-    for batch in tqdm(batch_aggregate_user_activity(collection, BATCH_SIZE)):
-        fluctuation_scores = calculate_fluctuation_scores(batch)
-        for author in fluctuation_scores.index:
-            plot_user_activity(pd.DataFrame(batch), author)
+for subreddit_group in SUBREDDIT_GROUPS:
+    group_scores = {usr_grp: pd.DataFrame() for usr_grp in USER_GROUPS}
+    for collection_name in ["submissions", "comments"]:
+        collection = connect_to_mongodb(DB_NAME, SUBMISSION_COLLECTION_NAME if collection_name == "submissions" else COMMENT_COLLECTION_NAME)
+        print(f"Processing {collection_name} data for subreddit group {subreddit_group}...")
+        for batch in tqdm(batch_aggregate_user_activity(collection, BATCH_SIZE, subreddit_group)):
+            df = pd.DataFrame(batch)
+            df['time_window'] = pd.to_datetime(df['created_utc'], unit='s')
+            df.set_index('time_window', inplace=True)
+            for usr_grp in USER_GROUPS:
+                group_df = df[df['usr_grp'] == usr_grp]
+                if not group_df.empty:
+                    score_series = group_df.resample(TIME_WINDOW).count()['author'].diff().abs()
+                    if group_scores[usr_grp].empty:
+                        group_scores[usr_grp] = score_series
+                    else:
+                        group_scores[usr_grp] = pd.concat([group_scores[usr_grp], score_series])
+    
+    # Plotting Group Activity
+    for usr_grp, scores_df in group_scores.items():
+        if not scores_df.empty:
+            scores_df = scores_df.resample(TIME_WINDOW).mean()
+            plot_group_activity(scores_df, f"{subreddit_group}_{usr_grp}")
 
 print("Processing complete.")

@@ -11,5 +11,24 @@ db.submissions.createIndex({ "author": 1 });
 db.submissions.createIndex({ "created_utc": 1 });
 
 
-db.submissions.createIndex({ "subreddit": 1 });
-db.comments.createIndex({ "subreddit": 1 });
+db.filtered_submissions_sentiment.createIndex({ "subreddit": 1 });
+db.filtered_comments_sentiment.createIndex({ "subreddit": 1 });
+
+db.filtered_submissions_sentiment.createIndex({ "author": 1 });
+db.filtered_comments_sentiment.createIndex({ "author": 1 });
+
+db.filtered_submissions_sentiment.createIndex({ "created_utc": 1 });
+db.filtered_comments_sentiment.createIndex({ "created_utc": 1 });
+
+db.filtered_submissions_standard.createIndex({ "subreddit": 1 });
+db.filtered_comments_standard.createIndex({ "subreddit": 1 });
+
+db.relevant_comments.createIndex({ "subreddit": 1 });
+db.relevant_submissions.createIndex({ "subreddit": 1 });
+
+db.relevant_comments.createIndex({ "author": 1 });
+db.relevant_submissions.createIndex({ "author": 1 });
+
+db.relevant_comments.createIndex({ "created_utc": 1 });
+db.relevant_submissions.createIndex({ "created_utc": 1 });
+

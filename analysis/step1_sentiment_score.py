@@ -1,59 +1,81 @@
 import pymongo
 import csv
 import matplotlib.pyplot as plt
-import seaborn as sns
-from tqdm import tqdm
+import os
+from collections import defaultdict
 
-# Database Configuration
+### Hyperparameters and Configurations ###
 DB_NAME = "reddit"
+OUTPUT_DIR = "./step1/"
+BATCH_SIZE = 100  # Adjustable batch size for data processing
+
+# Collection names
 COLLECTION_SUBMISSIONS = "filtered_submissions_score2"
 COLLECTION_COMMENTS = "filtered_comments_score2"
 
-# Connect to MongoDB
-client = pymongo.MongoClient("mongodb://localhost:27017/")
+# Ensure output directory exists
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
+
+# MongoDB connection
+client = pymongo.MongoClient()
 db = client[DB_NAME]
 
-# MongoDB Aggregation Pipeline
-# Adjust the field names and logic according to your data schema
-pipeline = [
-    {"$match": {"author": {"$ne": "[deleted]"}}},
-    {"$group": {
-        "_id": "$author",
-        "avg_sentiment": {"$avg": "$sentiment_score"}  # Use the correct field name
-    }}
-]
+# Function to process data from MongoDB
+def process_data(collection):
+    pipeline = [
+        {"$match": {"author": {"$ne": "[deleted]"}}},
+        {"$project": {"author": 1, "sentiment_score": 1, "subreddit_grp": 1, "usr_grp": 1}},
+        {"$group": {
+            "_id": {"author": "$author", "subreddit_grp": "$subreddit_grp", "usr_grp": "$usr_grp"},
+            "avg_sentiment": {"$avg": "$sentiment_score"}
+        }}
+    ]
+    return db[collection].aggregate(pipeline, allowDiskUse=True, batchSize=BATCH_SIZE)
 
-# Fetch Data from MongoDB
-print("Fetching data from MongoDB...")
-submissions_data = list(db[COLLECTION_SUBMISSIONS].aggregate(pipeline, allowDiskUse=True))
-comments_data = list(db[COLLECTION_COMMENTS].aggregate(pipeline, allowDiskUse=True))
+# Process submissions and comments
+submissions_data = process_data(COLLECTION_SUBMISSIONS)
+comments_data = process_data(COLLECTION_COMMENTS)
 
-# Combining Submissions and Comments Data
-combined_data = {}
-for data in submissions_data + comments_data:
-    author = data["_id"]
-    avg_sentiment = data["avg_sentiment"]
-    if author in combined_data:
-        combined_data[author].append(avg_sentiment)
-    else:
-        combined_data[author] = [avg_sentiment]
+# Combine data
+user_scores = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+for data in submissions_data:
+    author = data["_id"]["author"]
+    subreddit_grp = data["_id"]["subreddit_grp"]
+    usr_grp = data["_id"]["usr_grp"]
+    user_scores[author][usr_grp][subreddit_grp].append(data["avg_sentiment"])
 
-# Calculate Final Average Sentiment for Each User
-final_data = {author: sum(sentiments)/len(sentiments) for author, sentiments in combined_data.items()}
+for data in comments_data:
+    author = data["_id"]["author"]
+    subreddit_grp = data["_id"]["subreddit_grp"]
+    usr_grp = data["_id"]["usr_grp"]
+    user_scores[author][usr_grp][subreddit_grp].append(data["avg_sentiment"])
 
-# Visualization
-plt.figure(figsize=(10, 6))
-sns.distplot(list(final_data.values()), bins=30, kde=False)
-plt.title("Distribution of Average Sentiment Scores")
-plt.xlabel("Average Sentiment Score")
-plt.ylabel("Number of Users")
-plt.savefig("sentiment_distribution.png")
+# Calculate final average sentiment scores
+final_scores = {}
+for author, usr_grps in user_scores.items():
+    final_scores[author] = {usr_grp: {subreddit_grp: sum(scores)/len(scores) for subreddit_grp, scores in subreddits.items()} for usr_grp, subreddits in usr_grps.items()}
 
-# Save Data to CSV
-with open("average_sentiment_scores.csv", "w", newline="") as file:
-    writer = csv.writer(file)
-    writer.writerow(["Author", "Average Sentiment Score"])
-    for author, avg_score in tqdm(final_data.items(), desc="Writing to CSV"):
-        writer.writerow([author, avg_score])
+# Save the results to CSV and plot
+for usr_grp in ["SW", "MH", "Otr"]:
+    for subreddit_grp in ["SW", "MH", "Otr"]:
+        filename = OUTPUT_DIR + f"sentiment_scores_{usr_grp}_{subreddit_grp}.csv"
+        with open(filename, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["User", "Average Sentiment Score"])
+            for author, usr_grps in final_scores.items():
+                if usr_grp in usr_grps and subreddit_grp in usr_grps[usr_grp]:
+                    score = usr_grps[usr_grp][subreddit_grp]
+                    writer.writerow([author, score])
 
-print("Analysis complete. Data saved to CSV and plot generated.")
+        # Plot sentiment score distributions
+        scores = [usr_grps[usr_grp][subreddit_grp] for author, usr_grps in final_scores.items() if usr_grp in usr_grps and subreddit_grp in usr_grps[usr_grp]]
+        plt.figure()
+        plt.hist(scores, bins=30, alpha=0.7, label=f"{usr_grp}-{subreddit_grp} Sentiment Scores")
+        plt.title(f'Sentiment Score Distribution: {usr_grp} Users in {subreddit_grp}')
+        plt.xlabel('Average Sentiment Score')
+        plt.ylabel('Frequency')
+        plt.legend()
+        plt.savefig(OUTPUT_DIR + f"sentiment_distribution_{usr_grp}_{subreddit_grp}.png")
+
+print("Analysis complete. Data and plots saved to the './step1/' directory.")

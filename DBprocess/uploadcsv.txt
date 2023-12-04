@@ -3,3 +3,7 @@ mongoimport --type csv -d reddit -c filtered_submissions --headerline --file ./f
 mongoimport --type csv -d reddit -c filtered_comments --headerline --file ./filtered_comments.csv
 
 mongoimport --type csv -d reddit -c filtered_submissions_bunch --headerline --file ./filtered_submissions_by_subreddit.csv
+
+mongoimport --type csv -d reddit -c SW_submissions --headerline --file ./SW_submissions.csv
+
+mongoimport --type csv -d reddit -c SW_comments --headerline --file ./SW_comments.csv

@@ -1,0 +1,66 @@
+const submissionsCollectionName = "relevant_comments";
+const commentsCollectionName = "relevant_submissions";
+
+// Step 1: Combine Submissions and Comments into a temporary collection
+db[submissionsCollectionName].aggregate([
+  { $project: { author: 1, subreddit_grp: 1 } },
+  { $out: "temp_combined_users" }
+]);
+db[commentsCollectionName].aggregate([
+  { $project: { author: 1, subreddit_grp: 1 } },
+  { $merge: { into: "temp_combined_users", whenMatched: "merge", whenNotMatched: "insert" } }
+]);
+
+// Step 2: Group by author and determine user groups
+db.temp_combined_users.aggregate([
+  {
+    $group: {
+      _id: "$author",
+      subreddits: { $addToSet: "$subreddit_grp" }
+    }
+  },
+  {
+    $project: {
+      user_grp: {
+        $cond: {
+          if: { $in: ["SW", "$subreddits"] },
+          then: "SW",
+          else: {
+            $cond: {
+              if: { $in: ["MH", "$subreddits"] },
+              then: "MH",
+              else: "Otr"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    $merge: { into: "user_groups" }
+  }
+]);
+
+// Update function for both collections
+function updateUserGroups(collectionName) {
+  db[collectionName].aggregate([
+    {
+      $lookup: {
+        from: "user_groups",
+        localField: "author",
+        foreignField: "_id",
+        as: "user_info"
+      }
+    },
+    { $unwind: "$user_info" },
+    { $addFields: { user_grp: "$user_info.user_grp" } },
+    { $out: collectionName }
+  ]);
+}
+
+// Step 3: Update both Submissions and Comments collections
+updateUserGroups(submissionsCollectionName);
+updateUserGroups(commentsCollectionName);
+
+// Optionally, clean up the temporary collection
+db.temp_combined_users.drop();

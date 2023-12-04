@@ -16,3 +16,4 @@ src/usertest.ipynb
 *.csv
 *.pkl
 *.png
+analysis/oldanalysis/
