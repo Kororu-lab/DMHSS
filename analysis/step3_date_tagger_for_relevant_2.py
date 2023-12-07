@@ -14,7 +14,7 @@ collection = db[COLLECTION_NAME]
 def add_created_day_field():
     try:
         # Process each document in the collection
-        for doc in tqdm(collection.find()):
+        for doc in tqdm(collection.find({'created_day': {'$exists': False}})):
             # Extract 'created_utc' field
             created_utc = doc.get('created_utc')
             if created_utc:
@@ -29,7 +29,6 @@ def add_created_day_field():
         print("All documents have been updated with 'created_day' field.")
     except Exception as e:
         print(f"An error occurred: {e}")
-
 
 # Run the function
 add_created_day_field()

@@ -1,67 +1,86 @@
-import pymongo
+from pymongo import MongoClient
 import pandas as pd
-from datetime import datetime
 from tqdm import tqdm
-import numpy as np
+import nltk
+from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk.tag import pos_tag
+from collections import Counter
+import textstat
 
-# MongoDB Connection Parameters
-DB_NAME = "reddit"
-SUBMISSION_COLLECTION_NAME = "filtered_submissions_standard"
-COMMENT_COLLECTION_NAME = "filtered_comments_standard"
-BATCH_SIZE = 10000
+# Download necessary NLTK resources
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
 
-# Scoring Hyperparameters
-W1 = 0.6  # Weight for daily score
-W2 = 0.4  # Weight for monthly score
-DECAY_RATE = 0.05  # Decay rate for time-decay function
+# MongoDB connection setup
+client = MongoClient()
+db = client['reddit']
 
-def connect_to_mongodb(db_name, collection_name):
-    client = pymongo.MongoClient()
-    db = client[db_name]
+# Collection names and parameters
+submissions_collection_name = "stat_submissions"
+comments_collection_name = "stat_comments"
+batch_size = 1000  # Adjust based on your MongoDB server's capability
+
+# Weights for scoring
+weights = {
+    'noun_ratio': -1.5,
+    'first_person_singular_ratio': 1,
+    'keyword_score': 2,
+    'text_length': 0.005
+}
+
+# Define critical keywords
+critical_keywords = ["depression", "suicide", "anxiety", "suicidal", "can't"]
+
+def process_text(text):
+    text = str(text) if text is not None else ''
+    words = word_tokenize(text)
+    tagged = pos_tag(words)
+    pos_counts = Counter(tag for word, tag in tagged)
+    total_words = len(words)
+
+    # Extract required features
+    num_nouns = sum(pos_counts[tag] for tag in ['NN', 'NNS', 'NNP', 'NNPS'])
+    first_person_singular_pronouns = sum(1 for word, tag in tagged if word.lower() in ['i', 'me', 'my', 'mine', 'myself'] and tag in ['PRP', 'PRP$'])
+    keyword_score = any(word in text.lower() for word in critical_keywords)
+
+    # Calculate ratios
+    noun_ratio = num_nouns / total_words if total_words > 0 else 0
+    first_person_singular_ratio = first_person_singular_pronouns / total_words if total_words > 0 else 0
+
+    return {
+        "noun_ratio": noun_ratio,
+        "first_person_singular_ratio": first_person_singular_ratio,
+        "keyword_score": keyword_score,
+        "text_length": total_words
+    }
+
+def calculate_score(features, weights):
+    # Function to calculate the final score based on the extracted features and weights
+    # Efficiently calculates only for non-zero weights
+    final_score = 0
+    for feature, weight in weights.items():
+        if weight != 0 and feature in features:
+            final_score += weight * features[feature]
+    return final_score
+
+def update_collection_with_scores(collection_name):
     collection = db[collection_name]
-    return collection
+    cursor = collection.find().batch_size(batch_size)
+    
+    for document in tqdm(cursor, desc=f"Processing {collection_name}"):
+        # Handle submissions and comments differently
+        if collection_name.endswith('submissions'):
+            title = str(document.get('title', ''))
+            selftext = str(document.get('selftext', ''))
+            text = title + ' ' + selftext if selftext not in ['[removed]', '[deleted]'] else title
+        else:  # For comments
+            text = str(document.get('body', ''))
 
-def calculate_and_store_scores(collection, batch_size):
-    pipeline = [
-        {"$project": {"author": 1, "created_day": 1}},
-        {"$sort": {"created_day": 1}},
-        {"$skip": 0},
-        {"$limit": batch_size}
-    ]
-    skip = 0
-    while True:
-        pipeline[2]["$skip"] = skip
-        batch = list(collection.aggregate(pipeline, allowDiskUse=True))
-        if not batch:
-            break
+        if text.strip():
+            features = process_text(text)
+            score = calculate_score(features, weights)
+            collection.update_one({'_id': document['_id']}, {'$set': {'pos_score': score}})
 
-        df = pd.DataFrame(batch)
-        df['created_day'] = pd.to_datetime(df['created_day'])
-
-        # Calculate daily and monthly scores
-        daily_scores = df.groupby(['author', 'created_day'])['_id'].count().diff().fillna(0)
-        monthly_scores = df.groupby(['author', pd.Grouper(key='created_day', freq='M')])['_id'].count().diff().fillna(0)
-
-        # Combine scores with weights and apply time-decay
-        max_date = df['created_day'].max()
-        df['days_ago'] = (max_date - df['created_day']).dt.days
-        df['time_based'] = (W1 * daily_scores + W2 * monthly_scores) * np.exp(-DECAY_RATE * df['days_ago'])
-
-        # Normalize 'time_based' scores
-        df['time_based'] = (df['time_based'] - df['time_based'].min()) / (df['time_based'].max() - df['time_based'].min())
-
-        # Update MongoDB Documents
-        for _, row in df.iterrows():
-            collection.update_one({'_id': row['_id']}, {'$set': {'time_based': row['time_based']}})
-
-        skip += batch_size
-        tqdm.write(f"Processed batch up to skip = {skip}")
-
-# Process Submissions and Comments
-submissions_collection = connect_to_mongodb(DB_NAME, SUBMISSION_COLLECTION_NAME)
-comments_collection = connect_to_mongodb(DB_NAME, COMMENT_COLLECTION_NAME)
-
-calculate_and_store_scores(submissions_collection, BATCH_SIZE)
-calculate_and_store_scores(comments_collection, BATCH_SIZE)
-
-print("Processing complete.")
+# Main execution
+update_collection_with_scores(submissions_collection_name)
+update_collection_with_scores(comments_collection_name)

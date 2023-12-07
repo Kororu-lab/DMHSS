@@ -8,60 +8,78 @@ import numpy as np
 DB_NAME = "reddit"
 SUBMISSION_COLLECTION_NAME = "filtered_submissions_standard"
 COMMENT_COLLECTION_NAME = "filtered_comments_standard"
-BATCH_SIZE = 10000
+BATCH_SIZE = 10000  # Adjust as needed
 
 # Scoring Hyperparameters
 W1 = 0.6  # Weight for daily score
 W2 = 0.4  # Weight for monthly score
 DECAY_RATE = 0.05  # Decay rate for time-decay function
 
-def connect_to_mongodb(db_name, collection_name):
+def connect_to_mongodb(db_name):
     client = pymongo.MongoClient()
     db = client[db_name]
+    return db
+
+def fetch_data(collection, batch_size, skip):
+    cursor = collection.find({}, {"created_day": 1, "author": 1}).skip(skip).limit(batch_size)
+    return pd.DataFrame(list(cursor))
+
+def process_batch(df):
+    df['created_day'] = pd.to_datetime(df['created_day'])
+    df['count'] = 1
+
+    # Calculate daily scores
+    daily_scores = df.groupby(['author', 'created_day']).count()['count'].groupby('author').diff().fillna(0)
+
+    # Calculate monthly scores
+    df['month'] = df['created_day'].dt.to_period('M')
+    monthly_counts = df.groupby(['author', 'month'])['count'].sum()
+    monthly_scores = monthly_counts.groupby('author').diff().fillna(0)
+
+    # Combine daily and monthly scores
+    combined_scores = W1 * daily_scores + W2 * monthly_scores
+
+    # Flatten the multi-index of combined_scores
+    combined_scores = combined_scores.reset_index(name='score')
+
+    # Calculate days ago for time decay
+    max_date = df['created_day'].max()
+    combined_scores['days_ago'] = (max_date - combined_scores['created_day']).dt.days
+
+    # Apply time decay and normalize scores
+    combined_scores['time_based'] = (combined_scores['score'] * np.exp(-DECAY_RATE * combined_scores['days_ago']))
+    min_score, max_score = combined_scores['time_based'].min(), combined_scores['time_based'].max()
+    combined_scores['time_based'] = (combined_scores['time_based'] - min_score) / (max_score - min_score)
+
+    # Set index back for updating MongoDB
+    combined_scores.set_index(['author', 'created_day'], inplace=True)
+
+    return combined_scores['time_based']
+
+def update_scores_in_mongo(db, collection_name, scores):
     collection = db[collection_name]
-    return collection
+    for (author, created_day), score in tqdm(scores.items(), total=scores.size):
+        query = {"author": author, "created_day": created_day.strftime('%Y-%m-%d')}
+        update = {"$set": {"time_based": score}}
+        collection.update_many(query, update)
 
-def calculate_and_store_scores(collection, batch_size):
-    pipeline = [
-        {"$project": {"author": 1, "created_day": 1}},
-        {"$sort": {"created_day": 1}},
-        {"$skip": 0},
-        {"$limit": batch_size}
-    ]
-    skip = 0
-    while True:
-        pipeline[2]["$skip"] = skip
-        batch = list(collection.aggregate(pipeline, allowDiskUse=True))
-        if not batch:
-            break
+# Main Execution
+db = connect_to_mongodb(DB_NAME)
 
-        df = pd.DataFrame(batch)
-        df['created_day'] = pd.to_datetime(df['created_day'])
+def process_and_update(collection_name):
+    collection = db[collection_name]
+    total_docs = collection.count_documents({})
+    for skip in tqdm(range(0, total_docs, BATCH_SIZE), desc=f"Processing {collection_name}"):
+        batch_data = fetch_data(collection, BATCH_SIZE, skip)
+        if batch_data.empty:
+            continue
+        scores = process_batch(batch_data)
+        update_scores_in_mongo(db, collection_name, scores)
 
-        # Calculate daily and monthly scores
-        daily_scores = df.groupby(['author', 'created_day'])['_id'].count().diff().fillna(0)
-        monthly_scores = df.groupby(['author', pd.Grouper(key='created_day', freq='M')])['_id'].count().diff().fillna(0)
+print("Processing submissions...")
+process_and_update(SUBMISSION_COLLECTION_NAME)
 
-        # Combine scores with weights and apply time-decay
-        max_date = df['created_day'].max()
-        df['days_ago'] = (max_date - df['created_day']).dt.days
-        df['time_based'] = (W1 * daily_scores + W2 * monthly_scores) * np.exp(-DECAY_RATE * df['days_ago'])
-
-        # Normalize 'time_based' scores
-        df['time_based'] = (df['time_based'] - df['time_based'].min()) / (df['time_based'].max() - df['time_based'].min())
-
-        # Update MongoDB Documents
-        for _, row in df.iterrows():
-            collection.update_one({'_id': row['_id']}, {'$set': {'time_based': row['time_based']}})
-
-        skip += batch_size
-        tqdm.write(f"Processed batch up to skip = {skip}")
-
-# Process Submissions and Comments
-submissions_collection = connect_to_mongodb(DB_NAME, SUBMISSION_COLLECTION_NAME)
-comments_collection = connect_to_mongodb(DB_NAME, COMMENT_COLLECTION_NAME)
-
-calculate_and_store_scores(submissions_collection, BATCH_SIZE)
-calculate_and_store_scores(comments_collection, BATCH_SIZE)
+print("Processing comments...")
+process_and_update(COMMENT_COLLECTION_NAME)
 
 print("Processing complete.")

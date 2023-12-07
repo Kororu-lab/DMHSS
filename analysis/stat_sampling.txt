@@ -1,0 +1,59 @@
+// Function to sample users from a user group in relevant_submissions
+function sampleUsersFromSubmissions(userGroup, sampleSize) {
+    var sampledUsers = [];
+    db.relevant_submissions.aggregate([
+        { $match: { user_grp: userGroup } },
+        { $group: { _id: '$author' } },
+        { $sample: { size: sampleSize } }
+    ]).forEach(doc => sampledUsers.push(doc._id));
+    return sampledUsers;
+}
+
+// Function to copy sampled users' data to new collections
+function copyDataToStatCollections(usersArray, sourceCollection, targetCollection) {
+    usersArray.forEach(user => {
+        var docs = db[sourceCollection].find({ author: user }).toArray();
+        if (docs.length > 0) {
+            db[targetCollection].insertMany(docs);
+        }
+    });
+}
+
+// Sampling size
+var SAMPLE_SIZE = 100000;
+
+// Sample users from each group in relevant_submissions
+var swUsers = sampleUsersFromSubmissions('SW', SAMPLE_SIZE);
+var mhUsers = sampleUsersFromSubmissions('MH', SAMPLE_SIZE);
+var otrUsers = sampleUsersFromSubmissions('Otr', SAMPLE_SIZE);
+
+// Copy data to stat_submissions
+copyDataToStatCollections(swUsers, 'relevant_submissions', 'stat_submissions');
+copyDataToStatCollections(mhUsers, 'relevant_submissions', 'stat_submissions');
+copyDataToStatCollections(otrUsers, 'relevant_submissions', 'stat_submissions');
+
+// Copy data to stat_comments
+copyDataToStatCollections(swUsers, 'relevant_comments', 'stat_comments');
+copyDataToStatCollections(mhUsers, 'relevant_comments', 'stat_comments');
+copyDataToStatCollections(otrUsers, 'relevant_comments', 'stat_comments');
+
+print("Data transfer complete.");
+
+
+
+// for practical use
+
+var SAMPLE_SIZE = 150000;
+var swUsers = sampleUsersFromSubmissions('SW', SAMPLE_SIZE);
+copyDataToStatCollections(swUsers, 'relevant_submissions', 'stat_submissions');
+copyDataToStatCollections(swUsers, 'relevant_comments', 'stat_comments');
+
+var SAMPLE_SIZE = 200000;
+var mhUsers = sampleUsersFromSubmissions('MH', SAMPLE_SIZE);
+copyDataToStatCollections(mhUsers, 'relevant_submissions', 'stat_submissions');
+copyDataToStatCollections(mhUsers, 'relevant_comments', 'stat_comments');
+
+var SAMPLE_SIZE = 350000;
+var otrUsers = sampleUsersFromSubmissions('Otr', SAMPLE_SIZE);
+copyDataToStatCollections(otrUsers, 'relevant_submissions', 'stat_submissions');
+copyDataToStatCollections(otrUsers, 'relevant_comments', 'stat_comments');

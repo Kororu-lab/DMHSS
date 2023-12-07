@@ -1,5 +1,5 @@
 // Define the collection name as a variable
-const collectionName = "filtered_submissions_sentiment";
+const collectionName = "filtered_comments_score2";
 
 const SW = ['SuicideWatch'];
 // Define the mh_subreddits array

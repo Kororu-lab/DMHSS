@@ -11,17 +11,30 @@ db.submissions.createIndex({ "author": 1 });
 db.submissions.createIndex({ "created_utc": 1 });
 
 
-db.filtered_submissions_sentiment.createIndex({ "subreddit": 1 });
-db.filtered_comments_sentiment.createIndex({ "subreddit": 1 });
+db.stat_comments.createIndex({ "subreddit_grp": 1 });
+db.stat_submissions.createIndex({ "subreddit_grp": 1 });
 
-db.filtered_submissions_sentiment.createIndex({ "author": 1 });
-db.filtered_comments_sentiment.createIndex({ "author": 1 });
+db.stat_comments.createIndex({ "author": 1 });
+db.stat_submissions.createIndex({ "author": 1 });
 
-db.filtered_submissions_sentiment.createIndex({ "created_utc": 1 });
-db.filtered_comments_sentiment.createIndex({ "created_utc": 1 });
+db.stat_comments.createIndex({ "created_day": 1 });
+db.stat_submissions.createIndex({ "created_day": 1 });
 
-db.filtered_submissions_standard.createIndex({ "subreddit": 1 });
-db.filtered_comments_standard.createIndex({ "subreddit": 1 });
+db.stat_comments.createIndex({ "user_grp": 1 });
+db.stat_submissions.createIndex({ "user_grp": 1 });
+
+db.stat_comments.createIndex({ "subreddit_grp": 1 });
+db.stat_submissions.createIndex({ "subreddit_grp": 1 });
+
+db.stat_comments.createIndex({ "created_utc": 1 });
+db.stat_submissions.createIndex({ "created_utc": 1 });
+
+db.stat_comments.createIndex({ "created_utc": 1 });
+db.stat_submissions.createIndex({ "created_utc": 1 });
+
+
+db.filtered_submissions_score2.createIndex({ "subreddit": 1 });
+db.filtered_comments_score2.createIndex({ "subreddit": 1 });
 
 db.relevant_comments.createIndex({ "subreddit": 1 });
 db.relevant_submissions.createIndex({ "subreddit": 1 });
@@ -32,3 +45,10 @@ db.relevant_submissions.createIndex({ "author": 1 });
 db.relevant_comments.createIndex({ "created_utc": 1 });
 db.relevant_submissions.createIndex({ "created_utc": 1 });
 
+
+db.filtered_comments_standard.createIndex({ "link_id": 1 });
+db.filtered_submissions_standard.createIndex({ "id": 1 });
+db.filtered_comments_standard.createIndex({ "parent_id": 1 });
+
+comments_collection.create_index("link_id")
+comments_collection.create_index("parent_id")

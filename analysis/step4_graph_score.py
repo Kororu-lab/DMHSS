@@ -7,13 +7,14 @@ import numpy as np
 
 # Hyperparameters
 DB_NAME = 'reddit'
-COMMENTS_COLLECTION_NAME = 'stat_comments'
-SUBMISSIONS_COLLECTION_NAME = 'stat_submissions'
+COMMENTS_COLLECTION_NAME = 'relevant_comments'
+SUBMISSIONS_COLLECTION_NAME = 'relevant_submissions'
 INTERACTION_WEIGHT = 1
 UNIQUE_USER_WEIGHT = 2
 SUBREDDIT_DIVERSITY_WEIGHT = 3
 OUTLIER_THRESHOLD_RATIO = 0.90  # Top 20% are considered outliers
 BATCH_SIZE = 500  # Adjustable batch size for processing large datasets
+OVERWRITE = False  # Set to True to overwrite existing 'graph' field
 
 client = MongoClient()
 db = client[DB_NAME]
@@ -84,62 +85,17 @@ def normalize_scores_with_threshold(data):
     df['normalized_score'] = (df['normalized_score'] - df['normalized_score'].min()) / (threshold - df['normalized_score'].min())
     return df
 
-def export_to_csv_and_plot(data, filename):
-    output_dir = "./step4/"
-    os.makedirs(output_dir, exist_ok=True)
+def update_database_with_scores(scores_df, collection_name):
+    collection = db[collection_name]
 
-    # Reordering the DataFrame
-    column_order = ["SW", "MH", "Otr", "ALL"]
-    row_order = ["SW", "MH", "Otr"]  # Add additional groups if necessary
+    for index, row in scores_df.iterrows():
+        query = {"author": row['author'], "created_day": {"$regex": "^" + row['month']}}
+        new_values = {"$set": {"graph": row['avg_comm_score']}}
 
-    # Creating a pivot table with specified row and column order
-    pivot_table = data.pivot_table(index='user_grp', columns='subreddit_grp', values='normalized_score', fill_value=0)
-    pivot_table = pivot_table.reindex(row_order, axis="index")  # Reorder rows
-    pivot_table = pivot_table.reindex(column_order, axis="columns")  # Reorder columns
+        if not OVERWRITE:
+            query["graph"] = {"$exists": False}
 
-    # Plotting
-    plt.figure(figsize=(8, 4))  # Adjusted plot size (width x height)
-    sns.heatmap(pivot_table, annot=True, fmt=".2f", cmap="YlGnBu")
-    plt.title("Per-User Normalized Communication Score Matrix")
-    plt.savefig(os.path.join(output_dir, filename.replace('.csv', '.png')))
-    data.to_csv(os.path.join(output_dir, filename), index=False)
-
-
-def plot_time_wise_scores(data):
-    # Convert 'month' to datetime for plotting
-    data['month'] = pd.to_datetime(data['month'], format='%Y-%m')
-    
-    # Define base color palettes
-    base_palettes = {
-        "SW": sns.light_palette("blue", n_colors=3),
-        "MH": sns.light_palette("red", n_colors=3),
-        "Otr": sns.light_palette("green", n_colors=3),
-        "ALL": sns.light_palette("grey", n_colors=3)
-    }
-
-    # Determine the unique user groups present in the data
-    unique_user_groups = data['user_grp'].unique()
-
-    # Create a custom palette for the unique user groups
-    custom_palette = {}
-    for group in unique_user_groups:
-        if group in base_palettes:
-            color_palette = base_palettes[group]
-            for idx, subreddit in enumerate(data[data['user_grp'] == group]['subreddit_grp'].unique()):
-                if idx < len(color_palette):
-                    custom_palette[subreddit] = color_palette[idx]
-
-    plt.figure(figsize=(15, 10))
-    sns.lineplot(data=data, x='month', y='normalized_score', hue='subreddit_grp', style='user_grp', palette=custom_palette, markers=True)
-    plt.title("Time-wise Communication Scores by Subreddit and User Group")
-    plt.xlabel("Month")
-    plt.ylabel("Normalized Communication Score")
-    plt.xticks(rotation=45)
-    plt.legend(title='Group')
-    plt.tight_layout()
-
-    # Save the plot
-    plt.savefig(os.path.join("./step4/", "time_wise_communication_scores.png"))
+        collection.update_many(query, new_values)
 
 def main():
     all_scores = []
@@ -147,15 +103,13 @@ def main():
         print(f"Processing {group}...")
         scores = calculate_communication_scores(group)
         scores['subreddit_grp'] = group
-        print(scores.head())  # Debugging: Verify the inclusion of 'user_grp'
         all_scores.append(scores)
 
     combined_df = pd.concat(all_scores, ignore_index=True)
-    print("Combined DataFrame sample:")
-    print(combined_df.head())  # Debugging: Inspect the combined DataFrame
-    export_to_csv_and_plot(combined_df, "normalized_communication_scores.csv")
-    export_to_csv_and_plot(combined_df, "normalized_communication_scores.csv")
-    plot_time_wise_scores(combined_df)
+    update_database_with_scores(combined_df, COMMENTS_COLLECTION_NAME)
+    update_database_with_scores(combined_df, SUBMISSIONS_COLLECTION_NAME)
+
+    print("Database update complete.")
 
 if __name__ == "__main__":
     main()

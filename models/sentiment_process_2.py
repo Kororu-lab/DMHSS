@@ -7,8 +7,8 @@ from multiprocessing import Pool, current_process
 
 ### Hyperparameters and Configurations ###
 DB_NAME = "reddit"
-COLLECTION_NAME = "filtered_submissions_standard"
-COLLECTION_TYPE = "S"  # 'C' for comments, 'S' for submissions
+COLLECTION_NAME = "filtered_comments_standard"
+COLLECTION_TYPE = "C"  # 'C' for comments, 'S' for submissions
 BATCH_SIZE = 80  # Adjust based on available VRAM and model size
 NUM_WORKERS = 2  # Number of parallel processes for data fetching
 

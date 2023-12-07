@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 # MongoDB Connection Parameters
 DB_NAME = "reddit"              # Replace with your database name
-COLLECTION_NAME = "relevant_submissions"    # Replace with your collection name
+COLLECTION_NAME = "stat_comments"    # Replace with your collection name
 
 # Connect to MongoDB
 client = pymongo.MongoClient()
