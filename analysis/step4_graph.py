@@ -2,128 +2,94 @@ import pandas as pd
 from pymongo import MongoClient
 from tqdm import tqdm
 import os
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 # MongoDB setup
 DB_NAME = 'reddit'
-USER_COLLECTION_NAME = 'filtered_submissions_standard'  # Collection to fetch target users
 COMMENTS_COLLECTION_NAME = 'filtered_comments_standard'
 SUBMISSIONS_COLLECTION_NAME = 'filtered_submissions_standard'
+USER_COLLECTION_NAME = 'filtered_submissions_standard'  # Collection containing target users
 OUTPUT_DIR = "./step4/"
-BATCH_SIZE = 500  # Batch size for processing
+BATCH_SIZE = 500  # Number of users to process in each batch
 
-# Scoring Weights (Hyperparameters)
-BREADTH_WEIGHT = 1
-DEPTH_WEIGHT = 1
-SUBREDDIT_WEIGHTS = {'SW': 1, 'MH': 1, 'Otr': 1}
+# Scoring weights
+COMMENT_SCORE_WEIGHT = 1
+SUBMISSION_SCORE_WEIGHT = 2
+SUBMISSION_COMMENT_WEIGHT = 2
+REPEATED_COMMENT_MULTIPLIER = 4  # Multiplier for repeated comments on the same thread
 
 client = MongoClient()
 db = client[DB_NAME]
 user_col = db[USER_COLLECTION_NAME]
 
 def fetch_target_users():
-    """ Fetch a list of target users from the specified collection. """
     pipeline = [
         {"$group": {"_id": "$author"}},
         {"$limit": BATCH_SIZE}
     ]
     return [doc['_id'] for doc in user_col.aggregate(pipeline)]
 
-def calculate_interaction_metrics(target_users):
-    subreddit_weights = {
-        'SW': SUBREDDIT_WEIGHTS['SW'],
-        'MH': SUBREDDIT_WEIGHTS['MH'],
-        'Otr': SUBREDDIT_WEIGHTS['Otr']
-    }
+def process_comments(user, subreddit_grp, month):
+    comments = db[COMMENTS_COLLECTION_NAME].find({
+        "author": user,
+        "subreddit_grp": subreddit_grp,
+        "created_day": {"$regex": f"^{month}-"}
+    })
+    comment_scores = 0
+    unique_thread_ids = set()
+    for comment in comments:
+        comment_scores += comment['score'] * COMMENT_SCORE_WEIGHT
+        if comment['parent_id'] in unique_thread_ids:
+            comment_scores += comment['score'] * REPEATED_COMMENT_MULTIPLIER
+        unique_thread_ids.add(comment['parent_id'])
+    return comment_scores
 
-    pipeline = [
-        {"$match": {"author": {"$in": target_users}}},
-        {"$unionWith": {
-            "coll": SUBMISSIONS_COLLECTION_NAME,
-            "pipeline": [{"$project": {"author": 1, "subreddit_grp": 1, "created_day": 1, "parent_id": 1}}]
-        }},
-        {"$addFields": {"month": {"$substr": ["$created_day", 0, 7]}}},
-        {"$group": {
-            "_id": {"author": "$author", "subreddit_grp": "$subreddit_grp", "month": "$month"},
-            "unique_reply_authors": {"$addToSet": "$parent_author"},
-            "total_replies": {"$sum": 1}
-        }},
-        {"$project": {
-            "author": "$_id.author",
-            "subreddit_grp": "$_id.subreddit_grp",
-            "month": "$_id.month",
-            "interaction_breadth": {"$size": "$unique_reply_authors"},
-            "interaction_depth": {
-                "$cond": {
-                    "if": {"$gt": [{"$size": "$unique_reply_authors"}, 0]},
-                    "then": {"$divide": ["$total_replies", {"$size": "$unique_reply_authors"}]},
-                    "else": 0
-                }
-            },
-            "subreddit_weight": {
-                "$switch": {
-                    "branches": [
-                        {"case": {"$eq": ["$subreddit_grp", "SW"]}, "then": subreddit_weights['SW']},
-                        {"case": {"$eq": ["$subreddit_grp", "MH"]}, "then": subreddit_weights['MH']},
-                        {"case": {"$eq": ["$subreddit_grp", "Otr"]}, "then": subreddit_weights['Otr']}
-                    ],
-                    "default": 1
-                }
-            }
-        }},
-        {"$group": {
-            "_id": {"author": "$author", "month": "$month"},
-            "metrics": {
-                "$push": {
-                    "subreddit_grp": "$subreddit_grp",
-                    "breadth": "$interaction_breadth",
-                    "depth": "$interaction_depth",
-                    "subreddit_weight": "$subreddit_weight"
-                }
-            }
-        }},
-        {"$project": {
-            "author": "$_id.author",
-            "month": "$_id.month",
-            "scores": {
-                "$map": {
-                    "input": "$metrics",
-                    "as": "metric",
-                    "in": {
-                        "subreddit_grp": "$$metric.subreddit_grp",
-                        "score": {
-                            "$add": [
-                                {"$multiply": ["$$metric.breadth", BREADTH_WEIGHT]},
-                                {"$multiply": ["$$metric.depth", DEPTH_WEIGHT]},
-                                {"$multiply": ["$$metric.subreddit_weight", {"$add": [BREADTH_WEIGHT, DEPTH_WEIGHT]}]}
-                            ]
-                        }
-                    }
-                }
-            }
-        }}
-    ]
+def process_submissions(user, subreddit_grp, month):
+    submissions = db[SUBMISSIONS_COLLECTION_NAME].find({
+        "author": user,
+        "subreddit_grp": subreddit_grp,
+        "created_day": {"$regex": f"^{month}-"}
+    })
+    submission_scores = 0
+    for submission in submissions:
+        submission_scores += (submission['score'] * SUBMISSION_SCORE_WEIGHT +
+                              submission['num_comments'] * SUBMISSION_COMMENT_WEIGHT)
+    return submission_scores
 
-    return pd.DataFrame(list(db[COMMENTS_COLLECTION_NAME].aggregate(pipeline, batchSize=BATCH_SIZE)))
+def calculate_scores_for_user(user):
+    scores = {}
+
+    # Fetch all unique months for the given user from both comments and submissions
+    unique_months_comments = db[COMMENTS_COLLECTION_NAME].distinct("month", {"author": user})
+    unique_months_submissions = db[SUBMISSIONS_COLLECTION_NAME].distinct("month", {"author": user})
+    unique_months = list(set(unique_months_comments + unique_months_submissions))
+
+    for month in unique_months:
+        for subreddit_grp in ['SW', 'MH', 'Otr']:
+            scores[f"{subreddit_grp}-com-{month}"] = process_comments(user, subreddit_grp, month)
+            scores[f"{subreddit_grp}-sub-{month}"] = process_submissions(user, subreddit_grp, month)
+
+    return scores
+
 
 def main():
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
     target_users = fetch_target_users()
-    print(f"Total target users: {len(target_users)}")
 
-    interaction_metrics_df = pd.DataFrame()
+    all_scores = []
 
     with tqdm(total=len(target_users), desc="Processing Users") as pbar:
-        for i in range(0, len(target_users), BATCH_SIZE):
-            batch_users = target_users[i:i + BATCH_SIZE]
-            batch_metrics_df = calculate_interaction_metrics(batch_users)
-            interaction_metrics_df = pd.concat([interaction_metrics_df, batch_metrics_df])
-            pbar.update(len(batch_users))
+        for user in target_users:
+            user_scores = calculate_scores_for_user(user)  # This function will handle all available data
+            user_scores['author'] = user
+            all_scores.append(user_scores)
+            pbar.update(1)
 
-    output_file = os.path.join(OUTPUT_DIR, "interaction_metrics.csv")
-    interaction_metrics_df.to_csv(output_file, index=False)
-    print(f"Interaction metrics exported to {output_file}")
+    scores_df = pd.DataFrame(all_scores)
+    scores_df.to_csv(os.path.join(OUTPUT_DIR, "user_interaction_scores.csv"), index=False)
 
 if __name__ == "__main__":
     main()
