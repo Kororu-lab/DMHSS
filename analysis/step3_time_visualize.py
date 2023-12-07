@@ -7,8 +7,8 @@ from tqdm import tqdm
 
 # MongoDB Connection Parameters
 DB_NAME = "reddit"
-SUBMISSION_COLLECTION_NAME = "filtered_submissions_standard"
-COMMENT_COLLECTION_NAME = "filtered_comments_standard"
+SUBMISSION_COLLECTION_NAME = "stat_time"
+COMMENT_COLLECTION_NAME = "stat_time"
 
 def connect_to_mongodb(db_name):
     client = pymongo.MongoClient()
@@ -33,8 +33,10 @@ def create_dataframe_from_aggregation(data):
     df.set_index(['date', 'subreddit_grp'], inplace=True)
     return df
 
-def apply_log_scale(df):
-    df['avgTimeScore'] = np.log1p(df['avgTimeScore'])
+def apply_enhanced_log_scale(df):
+    # Apply a log scale transformation with a small constant
+    constant = 1e-9  # This constant can be adjusted
+    df['avgTimeScore'] = np.log(df['avgTimeScore'] + constant)
     return df
 
 def create_plot(dataframe, output_dir, output_file):
@@ -46,9 +48,9 @@ def create_plot(dataframe, output_dir, output_file):
     for group in tqdm(pivot_df.columns, desc="Plotting"):
         plt.plot(pivot_df.index, pivot_df[group], label=group)
     
-    plt.title("Log-Scaled Average Time-based Scores by Subreddit Group Over Time")
+    plt.title("Enhanced Log-Scaled Average Time-based Scores by Subreddit Group Over Time")
     plt.xlabel("Date")
-    plt.ylabel("Log-Scaled Average Time-based Score")
+    plt.ylabel("Enhanced Log-Scaled Average Time-based Score")
     plt.legend()
     plt.savefig(os.path.join(output_dir, output_file))
     plt.close()
@@ -60,12 +62,12 @@ db = connect_to_mongodb(DB_NAME)
 submissions_data = fetch_and_process_data(db[SUBMISSION_COLLECTION_NAME])
 comments_data = fetch_and_process_data(db[COMMENT_COLLECTION_NAME])
 
-# Convert to DataFrame and apply log scale
-df_submissions = apply_log_scale(create_dataframe_from_aggregation(submissions_data))
-df_comments = apply_log_scale(create_dataframe_from_aggregation(comments_data))
+# Convert to DataFrame and apply enhanced log scale
+df_submissions = apply_enhanced_log_scale(create_dataframe_from_aggregation(submissions_data))
+df_comments = apply_enhanced_log_scale(create_dataframe_from_aggregation(comments_data))
 
 # Plotting
-create_plot(df_submissions, './step3/', 'submissions_time_based_scores_log_scaled.png')
-create_plot(df_comments, './step3/', 'comments_time_based_scores_log_scaled.png')
+create_plot(df_submissions, './step3/', 'submissions_time_based_scores_enhanced_log_scaled.png')
+create_plot(df_comments, './step3/', 'comments_time_based_scores_enhanced_log_scaled.png')
 
 print("Plotting complete.")

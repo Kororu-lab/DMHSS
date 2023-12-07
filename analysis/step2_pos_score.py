@@ -16,8 +16,8 @@ client = MongoClient()
 db = client['reddit']
 
 # Collection names and parameters
-submissions_collection_name = "stat_submissions"
-comments_collection_name = "stat_comments"
+submissions_collection_name = "filtered_submissions"
+comments_collection_name = "filtered_comments"
 batch_size = 1000  # Adjust based on your MongoDB server's capability
 
 # Weights for scoring

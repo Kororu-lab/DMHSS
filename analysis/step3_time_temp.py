@@ -6,8 +6,8 @@ import numpy as np
 
 # MongoDB Connection Parameters
 DB_NAME = "reddit"
-SUBMISSION_COLLECTION_NAME = "stat_submissions"
-COMMENT_COLLECTION_NAME = "stat_comments"
+SUBMISSION_COLLECTION_NAME = "relevant_comments"
+COMMENT_COLLECTION_NAME = "relevant_submissions"
 BATCH_SIZE = 50000  # Adjust based on memory capacity
 
 # Scoring Hyperparameters
