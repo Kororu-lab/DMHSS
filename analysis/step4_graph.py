@@ -5,19 +5,19 @@ import os
 
 # MongoDB setup
 DB_NAME = 'reddit'
-COMMENTS_COLLECTION_NAME = 'stat_comments'
-SUBMISSIONS_COLLECTION_NAME = 'stat_submissions'
-USER_COLLECTION_NAME = 'stat_submissions'  # Updated collection name for users
+COMMENTS_COLLECTION_NAME = 'filtered_comments_standard'
+SUBMISSIONS_COLLECTION_NAME = 'filtered_submissions_standard'
+USER_COLLECTION_NAME = 'filtered_submissions_standard'  # Updated collection name for users
 OUTPUT_DIR = "./step4/"
 BATCH_SIZE = 500  # Number of users to process in each batch
 
 # Scoring weights and adjustments
-COMMENT_SCORE_WEIGHT = 1
-SUBMISSION_SCORE_WEIGHT = 1
-SUBMISSION_COMMENT_WEIGHT = 1
-REPEATED_COMMENT_MULTIPLIER = 0
-ZERO_SCORE_COMMENT_ADJUSTMENT = 1
-ZERO_SCORE_SUBMISSION_ADJUSTMENT = -1
+COMMENT_SCORE_WEIGHT = 3
+SUBMISSION_SCORE_WEIGHT = 0.5
+SUBMISSION_COMMENT_WEIGHT = 0.5
+REPEATED_COMMENT_MULTIPLIER = 9
+ZERO_SCORE_COMMENT_ADJUSTMENT = 2
+ZERO_SCORE_SUBMISSION_ADJUSTMENT = -0.5
 
 client = MongoClient()
 db = client[DB_NAME]

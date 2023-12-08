@@ -52,22 +52,18 @@ def calculate_communication_scores(subreddit_group=None):
                 "pipeline": [{"$project": {"author": 1, "user_grp": 1, "subreddit_grp": 1, "created_day": 1}}]
             }
         },
-        {
-            "$addFields": {"month": {"$substr": ["$created_day", 0, 7]}}
-        },
+        {"$addFields": {"month": {"$substr": ["$created_day", 0, 7]}}},
         {
             "$group": {
                 "_id": {"author": "$author", "month": "$month"},
                 "total_interactions": {"$sum": 1},
                 "unique_users": {"$addToSet": "$parent_author"},
-                "unique_subreddits": {"$addToSet": "$subreddit_grp"},
-                "user_grp": {"$first": "$user_grp"}  # Correctly extract user_grp
+                "unique_subreddits": {"$addToSet": "$subreddit_grp"}
             }
         },
         {
             "$group": {
                 "_id": {"author": "$_id.author", "month": "$_id.month"},
-                "user_grp": {"$first": "$user_grp"},
                 "avg_comm_score": {"$avg": {
                     "$add": [
                         {"$multiply": ["$total_interactions", INTERACTION_WEIGHT]},
@@ -77,28 +73,27 @@ def calculate_communication_scores(subreddit_group=None):
                 }}
             }
         },
-        {
-            "$project": {
-                "author": "$_id.author",
-                "month": "$_id.month",
-                "user_grp": 1,
-                "avg_comm_score": 1
-            }
-        }
+        {"$project": {
+            "author": "$_id.author",
+            "month": "$_id.month",
+            "avg_comm_score": 1
+        }}
     ]
 
-    # Using batch size in the aggregation
     raw_scores = list(db[COMMENTS_COLLECTION_NAME].aggregate(pipeline, batchSize=BATCH_SIZE))
     df = pd.DataFrame(raw_scores)
+    print("Debug: Dataframe head after aggregation", df.head())  # Debug print statement
 
-    # Extract 'author' and 'month' from '_id', drop '_id' afterwards
-    df['author'] = df['_id'].apply(lambda x: str(x.get('author')))  # Ensure author is a string
+    df['author'] = df['_id'].apply(lambda x: str(x.get('author')))
     df['month'] = df['_id'].apply(lambda x: x.get('month'))
     df.drop(columns=['_id'], inplace=True)
 
-    return normalize_scores_with_threshold(df)
+    return df
 
 def normalize_scores(dataframe, score_column, threshold_ratio):
+    if score_column not in dataframe.columns:
+        raise KeyError(f"Column '{score_column}' not found in DataFrame")
+    
     threshold = dataframe[score_column].quantile(threshold_ratio)
     dataframe['normalized_score'] = np.minimum(dataframe[score_column], threshold)
     min_score = dataframe['normalized_score'].min()
@@ -136,9 +131,7 @@ def main():
     # Fetch and calculate scores
     time_scores = fetch_time_based_scores()
     comm_scores = calculate_communication_scores()
-    
-    # Normalize communication scores
-    comm_scores = normalize_scores(comm_scores, 'total_interactions', OUTLIER_THRESHOLD_RATIO)
+    comm_scores = normalize_scores(comm_scores, 'avg_comm_score', OUTLIER_THRESHOLD_RATIO) # Normalize
     
     # Integrate and normalize scores
     integrated_scores = integrate_scores(comm_scores, time_scores)

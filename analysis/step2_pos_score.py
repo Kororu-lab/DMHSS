@@ -16,8 +16,8 @@ client = MongoClient()
 db = client['reddit']
 
 # Collection names and parameters
-submissions_collection_name = "filtered_submissions"
-comments_collection_name = "filtered_comments"
+submissions_collection_name = "filtered_submissions_standard"
+comments_collection_name = "filtered_comments_standard"
 batch_size = 1000  # Adjust based on your MongoDB server's capability
 
 # Weights for scoring
@@ -68,19 +68,30 @@ def update_collection_with_scores(collection_name):
     cursor = collection.find().batch_size(batch_size)
     
     for document in tqdm(cursor, desc=f"Processing {collection_name}"):
-        # Handle submissions and comments differently
-        if collection_name.endswith('submissions'):
+        doc_id = document.get('_id')
+
+        if 'submissions' in collection_name:
             title = str(document.get('title', ''))
             selftext = str(document.get('selftext', ''))
-            text = title + ' ' + selftext if selftext not in ['[removed]', '[deleted]'] else title
+            text = title
+            if selftext and selftext not in ['[removed]', '[deleted]']:
+                text += ' ' + selftext
         else:  # For comments
             text = str(document.get('body', ''))
 
         if text.strip():
             features = process_text(text)
-            score = calculate_score(features, weights)
-            collection.update_one({'_id': document['_id']}, {'$set': {'pos_score': score}})
+            if features:
+                score = calculate_score(features, weights)
+                update_result = collection.update_one({'_id': doc_id}, {'$set': {'pos_score': score}})
+                if update_result.modified_count == 0:
+                    print(f"Document not updated: {doc_id}")
+            else:
+                print(f"Skipping document due to processing error: {doc_id}")
+        else:
+            print(f"Skipping document due to empty text: {doc_id}")
 
 # Main execution
 update_collection_with_scores(submissions_collection_name)
 update_collection_with_scores(comments_collection_name)
+

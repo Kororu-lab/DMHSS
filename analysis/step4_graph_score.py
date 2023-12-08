@@ -1,115 +1,69 @@
-import os
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 from pymongo import MongoClient
-import numpy as np
+from tqdm import tqdm
 
-# Hyperparameters
+# MongoDB setup
 DB_NAME = 'reddit'
-COMMENTS_COLLECTION_NAME = 'relevant_comments'
-SUBMISSIONS_COLLECTION_NAME = 'relevant_submissions'
-INTERACTION_WEIGHT = 1
-UNIQUE_USER_WEIGHT = 2
-SUBREDDIT_DIVERSITY_WEIGHT = 3
-OUTLIER_THRESHOLD_RATIO = 0.90  # Top 20% are considered outliers
-BATCH_SIZE = 500  # Adjustable batch size for processing large datasets
-OVERWRITE = False  # Set to True to overwrite existing 'graph' field
+COMMENTS_COLLECTION_NAME = 'filtered_comments_standard'
+SUBMISSIONS_COLLECTION_NAME = 'filtered_submissions_standard'
+USER_COLLECTION_NAME = 'filtered_submissions_standard'  # Updated collection name for users
+# BATCH_SIZE = 500  # Number of users to process in each batch
+
+# Scoring weights and adjustments
+COMMENT_SCORE_WEIGHT = 3
+SUBMISSION_SCORE_WEIGHT = 0.5
+SUBMISSION_COMMENT_WEIGHT = 0.5
+REPEATED_COMMENT_MULTIPLIER = 9
+ZERO_SCORE_COMMENT_ADJUSTMENT = 2
+ZERO_SCORE_SUBMISSION_ADJUSTMENT = -0.5
 
 client = MongoClient()
 db = client[DB_NAME]
 
-def calculate_communication_scores(subreddit_group=None):
-    match_stage = {}
-    if subreddit_group and subreddit_group != "ALL":
-        match_stage = {"subreddit_grp": subreddit_group}
+def update_document(user, subreddit_grp, month, score, collection_name):
+    query = {"author": user, "subreddit_grp": subreddit_grp, "created_day": {"$regex": f"^{month}-"}}
+    update = {"$set": {"graph": score}}
+    if collection_name == COMMENTS_COLLECTION_NAME:
+        db[COMMENTS_COLLECTION_NAME].update_many(query, update)
+    else:
+        db[SUBMISSIONS_COLLECTION_NAME].update_many(query, update)
 
-    pipeline = [
-        {"$match": match_stage},
-        {
-            "$unionWith": {
-                "coll": SUBMISSIONS_COLLECTION_NAME,
-                "pipeline": [{"$project": {"author": 1, "user_grp": 1, "subreddit_grp": 1, "created_day": 1}}]
-            }
-        },
-        {
-            "$addFields": {"month": {"$substr": ["$created_day", 0, 7]}}
-        },
-        {
-            "$group": {
-                "_id": {"author": "$author", "month": "$month"},
-                "total_interactions": {"$sum": 1},
-                "unique_users": {"$addToSet": "$parent_author"},
-                "unique_subreddits": {"$addToSet": "$subreddit_grp"},
-                "user_grp": {"$first": "$user_grp"}  # Correctly extract user_grp
-            }
-        },
-        {
-            "$group": {
-                "_id": {"author": "$_id.author", "month": "$_id.month"},
-                "user_grp": {"$first": "$user_grp"},
-                "avg_comm_score": {"$avg": {
-                    "$add": [
-                        {"$multiply": ["$total_interactions", INTERACTION_WEIGHT]},
-                        {"$multiply": [{"$size": "$unique_users"}, UNIQUE_USER_WEIGHT]},
-                        {"$multiply": [{"$size": "$unique_subreddits"}, SUBREDDIT_DIVERSITY_WEIGHT]}
-                    ]
-                }}
-            }
-        },
-        {
-            "$project": {
-                "author": "$_id.author",
-                "month": "$_id.month",
-                "user_grp": 1,
-                "avg_comm_score": 1
-            }
-        }
-    ]
+def calculate_and_update_scores(user, subreddit_grp, month, collection, collection_name):
+    documents = collection.find({
+        "author": user,
+        "subreddit_grp": subreddit_grp,
+        "created_day": {"$regex": f"^{month}-"}
+    })
+    total_score = 0
+    unique_thread_ids = set()
+    
+    for doc in documents:
+        score = int(doc.get('score', 0))
+        # Adjust for zero scores
+        if score == 0:
+            score = ZERO_SCORE_COMMENT_ADJUSTMENT if collection_name == COMMENTS_COLLECTION_NAME else ZERO_SCORE_SUBMISSION_ADJUSTMENT
 
-    # Using batch size in the aggregation
-    raw_scores = list(db[COMMENTS_COLLECTION_NAME].aggregate(pipeline, batchSize=BATCH_SIZE))
-    df = pd.DataFrame(raw_scores)
+        if collection_name == COMMENTS_COLLECTION_NAME:
+            total_score += score * COMMENT_SCORE_WEIGHT
+            if doc['parent_id'] in unique_thread_ids:
+                total_score += score * REPEATED_COMMENT_MULTIPLIER
+            unique_thread_ids.add(doc['parent_id'])
+        else:
+            total_score += score * SUBMISSION_SCORE_WEIGHT + int(doc.get('num_comments', 0)) * SUBMISSION_COMMENT_WEIGHT
 
-    # Extract 'author' and 'month' from '_id', drop '_id' afterwards
-    df['author'] = df['_id'].apply(lambda x: str(x.get('author')))  # Ensure author is a string
-    df['month'] = df['_id'].apply(lambda x: x.get('month'))
-    df.drop(columns=['_id'], inplace=True)
-
-    return normalize_scores_with_threshold(df)
-
-def normalize_scores_with_threshold(data):
-    df = pd.DataFrame(data)
-    threshold = df['avg_comm_score'].quantile(OUTLIER_THRESHOLD_RATIO)
-    df['normalized_score'] = df['avg_comm_score'].apply(lambda x: min(x, threshold))
-    df['normalized_score'] = (df['normalized_score'] - df['normalized_score'].min()) / (threshold - df['normalized_score'].min())
-    return df
-
-def update_database_with_scores(scores_df, collection_name):
-    collection = db[collection_name]
-
-    for index, row in scores_df.iterrows():
-        query = {"author": row['author'], "created_day": {"$regex": "^" + row['month']}}
-        new_values = {"$set": {"graph": row['avg_comm_score']}}
-
-        if not OVERWRITE:
-            query["graph"] = {"$exists": False}
-
-        collection.update_many(query, new_values)
+    update_document(user, subreddit_grp, month, total_score, collection_name)
 
 def main():
-    all_scores = []
-    for group in ["SW", "MH", "Otr", "ALL"]:
-        print(f"Processing {group}...")
-        scores = calculate_communication_scores(group)
-        scores['subreddit_grp'] = group
-        all_scores.append(scores)
+    users = db[USER_COLLECTION_NAME].distinct("author")
+    unique_users = list(set(users))
 
-    combined_df = pd.concat(all_scores, ignore_index=True)
-    update_database_with_scores(combined_df, COMMENTS_COLLECTION_NAME)
-    update_database_with_scores(combined_df, SUBMISSIONS_COLLECTION_NAME)
+    for user in tqdm(unique_users, desc="Processing Users"):
+        unique_months = db[COMMENTS_COLLECTION_NAME].distinct("month", {"author": user}) + db[SUBMISSIONS_COLLECTION_NAME].distinct("month", {"author": user})
+        unique_months = list(set(unique_months))
 
-    print("Database update complete.")
+        for month in unique_months:
+            for subreddit_grp in ['SW', 'MH', 'Otr']:
+                calculate_and_update_scores(user, subreddit_grp, month, db[COMMENTS_COLLECTION_NAME], COMMENTS_COLLECTION_NAME)
+                calculate_and_update_scores(user, subreddit_grp, month, db[SUBMISSIONS_COLLECTION_NAME], SUBMISSIONS_COLLECTION_NAME)
 
 if __name__ == "__main__":
     main()
