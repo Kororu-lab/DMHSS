@@ -1,5 +1,5 @@
 ## Step 1 Analysis: Sentimental Score
-For the base of scoring we tried to use existing sentiment models from HuggingFace. Each document of Mongodb collection 
+For the base of scoring we tried to use existing sentiment models from HuggingFace. Each document of Mongodb collection got received their sentiemnts, and this dir is for their analysis results.
 
 ### Model 1: 'gooohjy/suicidal-electra'
 Model trained from Suicide and Depression Dataset obtained from Kaggle. For detailed info: https://huggingface.co/gooohjy/suicidal-electra

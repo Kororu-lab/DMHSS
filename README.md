@@ -59,7 +59,11 @@ GPU: NVIDIA RTX 4090(24G VRAM)
 ### Directory
 
 #### ./data
+This part of repo consists of processing Reddit Archive datasets.
 #### ./DBProcess
+This part used for filtering existing database or extracting some information from large dataset. 
 #### ./models
+This directory is purely for processing with sentiment models from HuggingFace.
 #### ./analysis
+Various Analysis methods used & outcomes
 #### Others
