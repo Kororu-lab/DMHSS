@@ -24,7 +24,7 @@ def load_and_aggregate_data(collection_name):
 
     # Aggregate data
     grouped = data.groupby(['user_grp', 'subreddit_grp']).agg({'pos_score': 'mean'}).reset_index()
-    pivot_table = grouped.pivot('user_grp', 'subreddit_grp', 'pos_score')
+    pivot_table = grouped.pivot(index='user_grp', columns='subreddit_grp', values='pos_score')
     pivot_table['ALL'] = pivot_table.mean(axis=1)  # Calculate average for ALL
     pivot_table = pivot_table.reindex(columns=subreddit_grps + ['ALL'])
 

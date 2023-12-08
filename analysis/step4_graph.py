@@ -48,14 +48,25 @@ def process_comments(user, subreddit_grp, month):
     comment_scores = 0
     unique_thread_ids = set()
     for comment in comments:
-        comment_score = comment.get('score', 0)  # Safely getting the score, default to 0 if not found
-        if comment_score == 0:
-            comment_score = 1 if comment.get('is_submitter', False) == False else -1
+        # Convert comment score to integer
+        comment_score = int(comment.get('score', 0))
 
+        # Adjust score based on the scoring logic
+        if comment_score == 0:
+            if not comment.get('is_submitter', False):  # If the user is not the submitter
+                comment_score = 1
+            else:  # If the user is the submitter
+                comment_score = -1
+
+        # Calculate the weighted score
         comment_scores += comment_score * COMMENT_SCORE_WEIGHT
+
+        # Check for repeated comments
         if comment['parent_id'] in unique_thread_ids:
             comment_scores += comment_score * REPEATED_COMMENT_MULTIPLIER
+
         unique_thread_ids.add(comment['parent_id'])
+
     return comment_scores
 
 def process_submissions(user, subreddit_grp, month):
@@ -67,9 +78,21 @@ def process_submissions(user, subreddit_grp, month):
     })
     submission_scores = 0
     for submission in submissions:
-        score = submission['score'] if submission['score'] != 0 else ZERO_SCORE_SUBMISSION_ADJUSTMENT
-        submission_scores += score * SUBMISSION_SCORE_WEIGHT
-        submission_scores += submission['num_comments'] * SUBMISSION_COMMENT_WEIGHT
+        # Convert submission score to integer
+        score = int(submission.get('score', 0))
+
+        # Adjust score based on the scoring logic
+        if score == 0:
+            if submission.get('num_comments', 0) == 0:  # If there are no comments
+                score = -1
+            else:  # If there are comments
+                score = 1
+
+        # Convert num_comments to integer and calculate the weighted score
+        num_comments = int(submission.get('num_comments', 0))
+        weighted_score = score * SUBMISSION_SCORE_WEIGHT + num_comments * SUBMISSION_COMMENT_WEIGHT
+        submission_scores += weighted_score
+
     return submission_scores
 
 def calculate_scores_for_user(user):
