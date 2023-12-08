@@ -26,22 +26,35 @@ def prepare_matrix_data(df):
 def prepare_time_data(df):
     # Melt the dataframe to long format
     df_melted = df.melt(id_vars=['author'], var_name='category', value_name='score')
-    
-    # Split the 'category' column into subreddit group, type, and year-month
+
+    # Convert 'score' to numeric, remove non-numeric entries
+    df_melted['score'] = pd.to_numeric(df_melted['score'], errors='coerce')
+    df_melted.dropna(subset=['score'], inplace=True)
+
+    # Print the first few rows of df_melted to check 'score' column
+    print("DataFrame after melting and score conversion:")
+    print(df_melted.head())
+
+    # Split the 'category' column into subreddit group, type, and year_month
     split_data = df_melted['category'].str.split('-', expand=True)
     df_melted['subreddit_grp'] = split_data[0]
     df_melted['type'] = split_data[1]
-    df_melted['year_month'] = split_data[2] + "-" + split_data[3]
+    df_melted['year_month'] = split_data[2] + '-' + split_data[3]
 
-    # Drop unnecessary columns
-    df_melted.drop(['author', 'category', 'type'], axis=1, inplace=True)
-    df_melted = df_melted.dropna(subset=['score'])
+    # Convert 'year_month' to datetime, remove invalid dates
+    df_melted['year_month'] = pd.to_datetime(df_melted['year_month'], format='%Y-%m', errors='coerce')
+    df_melted.dropna(subset=['year_month'], inplace=True)
 
-    # Convert 'year_month' to datetime
-    df_melted['year_month'] = pd.to_datetime(df_melted['year_month'], errors='coerce', format='%Y-%m').dt.to_period('M')
+    # Print the DataFrame before grouping
+    # print("DataFrame before grouping:")
+    # print(df_melted.head())
 
-    # Group by subreddit group and year-month, calculate the average score
-    grouped = df_melted.groupby(['subreddit_grp', 'year_month']).mean().reset_index()
+    # Group by subreddit group and year_month, calculate the average score
+    grouped = df_melted.groupby(['subreddit_grp', 'year_month'])['score'].mean().reset_index()
+
+    # Print the grouped data
+    # print("Grouped data:")
+    # print(grouped.head())
 
     return grouped
 
@@ -59,10 +72,11 @@ def create_matrix_plot(df):
 
 def create_time_wise_plot(df):
     plt.figure(figsize=(15, 7))
-    sns.lineplot(data=df, x='month', y='score', hue='subreddit_grp')
+    sns.lineplot(data=df, x='year_month', y='score', hue='subreddit_grp')
     plt.title("Average Scores Over Time by Subreddit Group")
     plt.ylabel("Average Score")
-    plt.xlabel("Month")
+    plt.xlabel("Year-Month")
+    # Save the plot
     plt.savefig(os.path.join(plot_dir, "time_wise_plot.png"))
 
 # Main function

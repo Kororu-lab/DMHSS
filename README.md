@@ -11,16 +11,28 @@ The Kaggle project, to classify reddit user by their subreddit only, could make 
 This kind of method, to classify T/F by submission text only, could not get full features of people who trying to end his life. For mor
 ### SNS user research(2016)
 Our further model partly refur to the method from 2016 research named "" which took a deep look into users of MH(Mental Health related subreddits) who moved to SW or not. They found out various user features with statistical method, including followings:
+#### POS Usage
+It was found that users who moved to SW from MH tend to use less ratio of nouns while more verbs, adverbs.
 #### Pronoun Usage
+It was found that users who moved to SW from MH more likely to use 1st singular pronouns(i.e. 'I') and 3rd person pronouns(i.e. 'he') more then others. 
 #### Frequent Word type
+According to the paper it was found users who moved from MH to SW tend to use particular words relatively more often then who not moved to SW.
 ## Integrated Model
 To overcome the previous problem of single post sentiment based models, we tried to get complex features from all-across reddit archive and integrate in single model to find out people who are in severe status effectively. To achieve the goal we tried various analysis methods for given data and found out some useful features to integrate.
 ## Analysis Methods We used
 We integrated four metrics to analyze each users active patterns with methods below:
 ### Sentiment Score
+This score metrics corresponds to existing metrics with normal sentiment analysis. However, we tried to give each activity a sentimetal temperature and tried to ditinguish and track for their timeline to get sentimantal delta.
+#### Detailed Metrics(Temp ver.)
 ### Language Structure Score
+Based on the 2016 studies of Reddit users we tried to check if those also applied for other types of users, and tried to integrate those lingual structures informations in the model of language structures, including POS, pronouns, keywords, text length, and so on.
+#### Detailed Metrics(Temp ver.)
 ### Active Pattern Score
+To figure out if users show different patterns of activity throughout the reddit, we tried to make time-window methods to numeralize those in degree of danger.
+#### Detailed Metrics(Temp ver.)
 ### Communication Score
+It is well known that those who are well going with communication with others has less danger of suicidal decision/execution, opposite not. Based on this idea we tried to make scores that could represent each users' degrees of commiting suicide.
+#### Detailed Metrics(Temp ver.)
 
 Due to the lack of computation, we constrainted our methods into 4, and integrated by summ up with weights for each normalized scores.
 
@@ -29,3 +41,25 @@ To test our model performance we tried some competetion for our new model and pr
 ### (TBD)
 ### Result
 
+## Structure of the Repo
+This repo contains all code files that made from performing the project, except only that contains particularly sensitive information or too large to upload. We run the code from following local machine so it could contain some locale dir that optimized to.
+### About Machine
+Our machine run at local with following specifics:
+
+OS: Ubuntu server 20.04(LTS)
+
+CPU: intel i9-9900k
+
+Memory/Swap: 64G DDR4/128G SSD(part of root disk) each
+
+Storage: 6.4T for root(/), mounted disk 3.84T(SSD1), 2T(SSD2), 1T(SSD3), 16T(HDD1), 6T(HDD2)
+
+GPU: NVIDIA RTX 4090(24G VRAM)
+
+### Directory
+
+#### ./data
+#### ./DBProcess
+#### ./models
+#### ./analysis
+#### Others
