@@ -15,9 +15,9 @@ BATCH_SIZE = 500  # Number of users to process in each batch
 
 # Scoring weights
 COMMENT_SCORE_WEIGHT = 1
-SUBMISSION_SCORE_WEIGHT = 2
-SUBMISSION_COMMENT_WEIGHT = 2
-REPEATED_COMMENT_MULTIPLIER = 4  # Multiplier for repeated comments on the same thread
+SUBMISSION_SCORE_WEIGHT = 1
+SUBMISSION_COMMENT_WEIGHT = 1
+REPEATED_COMMENT_MULTIPLIER = 9  # Multiplier for repeated comments on the same thread
 
 client = MongoClient()
 db = client[DB_NAME]
@@ -71,7 +71,6 @@ def calculate_scores_for_user(user):
             scores[f"{subreddit_grp}-sub-{month}"] = process_submissions(user, subreddit_grp, month)
 
     return scores
-
 
 def main():
     if not os.path.exists(OUTPUT_DIR):
