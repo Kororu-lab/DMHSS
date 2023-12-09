@@ -37,7 +37,12 @@ def calculate_and_update_scores(user, subreddit_grp, month, collection, collecti
     unique_thread_ids = set()
     
     for doc in documents:
-        score = int(doc.get('score', 0))
+        try:
+            score = int(doc.get('score', 0))
+        except ValueError:
+            print(f"Skipping invalid score for user {user}, subreddit group {subreddit_grp}, month {month}")
+            continue
+
         # Adjust for zero scores
         if score == 0:
             score = ZERO_SCORE_COMMENT_ADJUSTMENT if collection_name == COMMENTS_COLLECTION_NAME else ZERO_SCORE_SUBMISSION_ADJUSTMENT

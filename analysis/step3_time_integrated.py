@@ -27,6 +27,12 @@ def fetch_time_based_scores():
         {"$group": {
             "_id": {"author": "$author", "user_grp": "$user_grp"},
             "avg_time_based": {"$avg": "$time_based"}
+        }},
+        {"$project": {
+            "author": "$_id.author",
+            "user_grp": "$_id.user_grp",
+            "avg_time_based": 1,
+            "_id": 0  # Exclude the _id field
         }}
     ]
     time_scores = list(db[SUBMISSIONS_COLLECTION_NAME].aggregate(pipeline, batchSize=BATCH_SIZE))
@@ -73,20 +79,21 @@ def calculate_communication_scores(subreddit_group=None):
                 }}
             }
         },
-        {"$project": {
-            "author": "$_id.author",
-            "month": "$_id.month",
-            "avg_comm_score": 1
-        }}
+        {
+            "$project": {
+                "author": 1,
+                "user_grp": 1,
+                "avg_comm_score": 1,
+                "_id": 0
+            }
+        }
     ]
 
     raw_scores = list(db[COMMENTS_COLLECTION_NAME].aggregate(pipeline, batchSize=BATCH_SIZE))
     df = pd.DataFrame(raw_scores)
-    print("Debug: Dataframe head after aggregation", df.head())  # Debug print statement
 
-    df['author'] = df['_id'].apply(lambda x: str(x.get('author')))
-    df['month'] = df['_id'].apply(lambda x: x.get('month'))
-    df.drop(columns=['_id'], inplace=True)
+    # Normalize the scores
+    df['normalized_comm_score'] = normalize_scores(df, 'avg_comm_score', OUTLIER_THRESHOLD_RATIO)['normalized_score']
 
     return df
 
@@ -100,16 +107,39 @@ def normalize_scores(dataframe, score_column, threshold_ratio):
     dataframe['normalized_score'] = (dataframe['normalized_score'] - min_score) / (threshold - min_score)
     return dataframe
 
+def normalize_scores(dataframe, score_column, threshold_ratio):
+    if score_column not in dataframe.columns:
+        raise KeyError(f"Column '{score_column}' not found in DataFrame")
+    
+    threshold = dataframe[score_column].quantile(threshold_ratio)
+    dataframe['normalized_score'] = np.minimum(dataframe[score_column], threshold)
+    min_score = dataframe['normalized_score'].min()
+    max_score = threshold  # Use threshold as the max for normalization
+    dataframe['normalized_score'] = (dataframe['normalized_score'] - min_score) / (max_score - min_score)
+    return dataframe
+
 def integrate_scores(comm_df, time_df):
-    # Merge communication and time-based scores
-    merged_df = pd.merge(comm_df, time_df, on=['author', 'user_grp'], how='inner')
+    # Debug: Print DataFrame columns and head
+    print("Debug: comm_df columns and head", comm_df.columns, comm_df.head())
+    print("Debug: time_df columns and head", time_df.columns, time_df.head())
+
+    # Merge operation
+    try:
+        merged_df = pd.merge(comm_df, time_df, on=['author', 'user_grp'], how='inner')
+    except KeyError as e:
+        print("Merge operation failed due to missing key:", e)
+        raise
+
+
     # Calculate integrated score
     merged_df['integrated_score'] = (
         merged_df['normalized_comm_score'] * (INTERACTION_WEIGHT + UNIQUE_USER_WEIGHT + SUBREDDIT_DIVERSITY_WEIGHT) +
         merged_df['avg_time_based'] * TIME_BASED_WEIGHT
     )
+
     # Normalize integrated score
-    return normalize_scores(merged_df, 'integrated_score', OUTLIER_THRESHOLD_RATIO)
+    normalized_merged_df = normalize_scores(merged_df, 'integrated_score', OUTLIER_THRESHOLD_RATIO)
+    return normalized_merged_df
 
 def export_to_csv(dataframe, filename):
     output_dir = "./output/"

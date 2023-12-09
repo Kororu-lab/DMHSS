@@ -7,14 +7,14 @@ import numpy as np
 
 # Hyperparameters
 DB_NAME = 'reddit'
-COMMENTS_COLLECTION_NAME = 'relevant_comments'
-SUBMISSIONS_COLLECTION_NAME = 'relevant_submissions'
+COMMENTS_COLLECTION_NAME = 'filtered_comments_standard'
+SUBMISSIONS_COLLECTION_NAME = 'filtered_submissions_standard'
 INTERACTION_WEIGHT = 1
 UNIQUE_USER_WEIGHT = 2
 SUBREDDIT_DIVERSITY_WEIGHT = 3
 OUTLIER_THRESHOLD_RATIO = 0.90  # Top 20% are considered outliers
 BATCH_SIZE = 500  # Adjustable batch size for processing large datasets
-OVERWRITE = False  # Set to True to overwrite existing 'graph' field
+OVERWRITE = False  # Set to True to overwrite existing 'comm_score' field
 
 client = MongoClient()
 db = client[DB_NAME]
@@ -90,10 +90,10 @@ def update_database_with_scores(scores_df, collection_name):
 
     for index, row in scores_df.iterrows():
         query = {"author": row['author'], "created_day": {"$regex": "^" + row['month']}}
-        new_values = {"$set": {"graph": row['avg_comm_score']}}
+        new_values = {"$set": {"comm_score": row['avg_comm_score']}}
 
         if not OVERWRITE:
-            query["graph"] = {"$exists": False}
+            query["comm_score"] = {"$exists": False}
 
         collection.update_many(query, new_values)
 
