@@ -19,7 +19,7 @@ SENTIMENT_SUBMISSION_FIELD = 'sentiment_score_complex'
 SENTIMENT_COMMENT_FIELD = 'sentiment_score'
 POS_FIELD = 'pos_score'
 GRAPH_FIELD = 'graph'
-TIME_BASED_FIELD = 'time_based_score'
+TIME_BASED_FIELD = 'comm_score'
 
 # Ensure output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -47,10 +47,10 @@ norm_ranges = {
 }
 
 weights = {
-    'sentiment': 50,
-    'pos': 0,
+    'sentiment': 2,
+    'pos': 1,
     'graph': 0,
-    'time_based': 0
+    'time_based': -1
 }
 
 # Functions for score normalization and integration

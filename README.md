@@ -10,7 +10,7 @@ The Kaggle project, to classify reddit user by their subreddit only, could make 
 ### Problem II: Lack of External Information or Metadata
 This kind of method, to classify T/F by submission text only, could not get full features of people who trying to end his life. For mor
 ### SNS user research(2016)
-Our further model partly refur to the method from 2016 research named "" which took a deep look into users of MH(Mental Health related subreddits) who moved to SW or not. They found out various user features with statistical method, including followings:
+Our further model partly refur to the method from 2016 research "Discovering Shifts to Suicidal Ideation from Mental Health Content in Social Media" which took a deep look into users of MH(Mental Health related subreddits) who moved to SW or not. They found out various user features with statistical method, including followings:
 #### POS Usage
 It was found that users who moved to SW from MH tend to use less ratio of nouns while more verbs, adverbs.
 #### Pronoun Usage
