@@ -99,7 +99,7 @@ def update_database_with_scores(scores_df, collection_name):
 
 def main():
     all_scores = []
-    for group in ["SW", "MH", "Otr", "ALL"]:
+    for group in ["SW", "MH", "Otr"]:
         print(f"Processing {group}...")
         scores = calculate_communication_scores(group)
         scores['subreddit_grp'] = group
