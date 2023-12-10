@@ -1,54 +1,50 @@
 import pymongo
-import pandas as pd
-from tqdm import tqdm
 
 # MongoDB Connection Parameters
 DB_NAME = "reddit"
 COMMENTS_COLLECTION = "filtered_comments_standard"
 SUBMISSIONS_COLLECTION = "filtered_submissions_standard"
-AGGREGATED_SCORE_FIELD = "time_based_score"
-NORMALIZE_SCORES = True  # Set to True to normalize scores before aggregation
-WEIGHTS = {"comm_score": 0.5, "time_based": 0.5}  # Weights for each score type
+THRESHOLD_RATIO = 0.7  # Threshold for normalization (70%)
+MIN_TIME_BASED_THRESHOLD = 0.01  # Minimum value for considering time_based score
+OVERWRITE_EXISTING = True  # Set to False to skip documents with existing 'time_based_score'
+SKIP_IF_EXISTS = False  # Set to True to skip updating documents that already have 'time_based_score'
 
 client = pymongo.MongoClient()
 db = client[DB_NAME]
 
-def normalize_scores(scores, score_field):
-    min_score = scores[score_field].min()
-    max_score = scores[score_field].max()
-    scores[score_field] = (scores[score_field] - min_score) / (max_score - min_score)
-    return scores
+def normalize_and_update_scores(collection_name):
+    collection = db[collection_name]
 
-def calculate_and_update_aggregated_scores(db, normalize_scores_flag):
-    pipeline = [
-        {
-            "$group": {
-                "_id": "$author",
-                "avg_comm_score": {"$avg": "$comm_score"},
-                "avg_time_based": {"$avg": "$time_based"}
-            }
-        }
-    ]
+    # Calculate threshold value for normalization
+    threshold_value = collection.aggregate([
+        {"$match": {"comm_score": {"$exists": True}}},
+        {"$group": {"_id": None, "max_score": {"$max": "$comm_score"}}}
+    ])
+    threshold_value = next(threshold_value, {}).get('max_score', 0) * THRESHOLD_RATIO
 
-    for collection_name in [COMMENTS_COLLECTION, SUBMISSIONS_COLLECTION]:
-        results = list(db[collection_name].aggregate(pipeline))
-        for result in tqdm(results, desc=f"Updating {collection_name}"):
-            scores_df = pd.DataFrame([result])
+    # Fetch documents and update scores
+    cursor = collection.find({})
+    for doc in cursor:
+        if SKIP_IF_EXISTS and 'time_based_score' in doc:
+            continue
 
-            if normalize_scores_flag:
-                scores_df = normalize_scores(scores_df, 'avg_comm_score')
-                scores_df = normalize_scores(scores_df, 'avg_time_based')
+        comm_score = doc.get('comm_score', 0)
+        time_based = doc.get('time_based', 0)
 
-            aggregated_score = (scores_df['avg_comm_score'].iloc[0] * WEIGHTS['comm_score'] +
-                                scores_df['avg_time_based'].iloc[0] * WEIGHTS['time_based'])
+        # Normalize comm_score
+        normalized_comm_score = min(comm_score / threshold_value, 1) if threshold_value != 0 else 0
 
-            # Update each author's document in the respective collection
-            query = {"author": result["_id"]}
-            update = {"$set": {AGGREGATED_SCORE_FIELD: aggregated_score}}
-            db[collection_name].update_many(query, update)
+        # Calculate final score and update document
+        final_score = normalized_comm_score
+        if time_based >= MIN_TIME_BASED_THRESHOLD:
+            final_score += time_based
+
+        update = {"$set": {"time_based_score": final_score}}
+        collection.update_one({"_id": doc["_id"]}, update)
 
 def main():
-    calculate_and_update_aggregated_scores(db, NORMALIZE_SCORES)
+    normalize_and_update_scores(COMMENTS_COLLECTION)
+    normalize_and_update_scores(SUBMISSIONS_COLLECTION)
 
 if __name__ == "__main__":
     main()
