@@ -1,0 +1,9 @@
+2023-12-11 12:59:19,667 INFO:Total documents: 118335247, Documents per worker: 59167623
+2023-12-11 12:59:19,667 INFO:Chunk: 0 to 59167623
+2023-12-11 12:59:19,668 INFO:Chunk: 59167623 to 118335246
+2023-12-11 12:59:19,675 INFO:Starting process ForkPoolWorker-1 for range 0-59167623
+2023-12-11 12:59:19,676 INFO:Starting process ForkPoolWorker-2 for range 59167623-118335246
+2023-12-11 13:00:38,471 INFO:Process ForkPoolWorker-1 working on 57824129 documents
+2023-12-11 13:00:38,472 INFO:Process ForkPoolWorker-2 working on 57824129 documents
+2023-12-11 13:01:58,845 INFO:Process ForkPoolWorker-2 processed 0 documents from 59167623 to 118335246
+2023-12-11 13:08:01,030 INFO:MongoDB connection closed.

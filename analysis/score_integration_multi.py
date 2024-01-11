@@ -8,7 +8,7 @@ import os
 ### Hyperparameters and Configurations ###
 DB_NAME = "reddit"
 OUTPUT_DIR = "./integrated/"
-OUTPUT_FILE = OUTPUT_DIR + "top500_scores.csv"
+OUTPUT_FILE = OUTPUT_DIR + "top500_unit_scores.csv"
 ORDER = "descending"  # Can be "ascending" or "descending"
 NORMALIZE = True  # Set to False if scores are already normalized
 TOP_N = 500  # Number of top/low users to retrieve
@@ -49,7 +49,7 @@ norm_ranges = {
 weights = {
     'sentiment': 2,
     'pos': 1,
-    'graph': 0,
+    'graph': -1,
     'time_based': -1
 }
 
