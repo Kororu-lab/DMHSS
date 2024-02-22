@@ -3,8 +3,8 @@
 # Define directories
 HDD_DIR_COMMENTS="/mnt/LaCie_2/reddit/comments"
 HDD_DIR_SUBMISSIONS="/mnt/LaCie_2/reddit/submissions"
-SSD_DIR="/media/kororu/Temp_Backup/DMHSS/data"
-HDD_DIR_PROCESSED="/media/kororu/Temp_Backup/reddit/workload"
+SSD_DIR="/home/kororu/DMHSS/data"
+HDD_DIR_PROCESSED="/home/kororu/DMHSS/donefile"
 
 # Fetch list of files from the directories
 comments_files=($(ls "$HDD_DIR_COMMENTS"/*.zst))
@@ -88,14 +88,14 @@ i=0
 while [ $i -lt ${#comments_files[@]} ]; do
     # Run 3 sets of file pairs in parallel
     process_files "${comments_files[$i]}" "${submissions_files[$i]}" &
-    process_files "${comments_files[$i+1]}" "${submissions_files[$i+1]}" &
+    #process_files "${comments_files[$i+1]}" "${submissions_files[$i+1]}" &
     #process_files "${comments_files[$i+2]}" "${submissions_files[$i+2]}" &
     
     # Wait for all 3 sets to finish before moving to the next set
     wait
     
     # Increment by 3 to process next set of files
-    i=$((i+2)) #3
+    i=$((i+1)) #3
 done
 
 echo "Batch processing completed!"
